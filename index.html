@@ -51,14 +51,14 @@
 
 
     /* === CATATAN ADMIN UNTUK HOME STAFF & HARIAN === */
-    .staff-home-note-card{margin:7px 0 0;padding:9px 10px;border-color:#bfdbfe;background:linear-gradient(135deg,#eff6ff,var(--card));overflow:hidden}
-    .staff-home-note-main{display:flex;align-items:center;gap:8px;min-width:0}
-    .staff-home-note-ico{width:30px;height:30px;min-width:30px;border-radius:11px;background:#dbeafe;border:1px solid #bfdbfe;color:var(--blue);display:inline-flex;align-items:center;justify-content:center;align-self:center;line-height:1;font-size:14px;font-weight:950}
+    .staff-home-note-card{margin:7px 0 0;padding:9px 10px;border-color:#bfdbfe;background:linear-gradient(135deg,#eff6ff,var(--card));overflow:visible}
+    .staff-home-note-main{display:flex;align-items:flex-start;gap:8px;min-width:0}
+    .staff-home-note-ico{width:30px;height:30px;min-width:30px;border-radius:11px;background:#dbeafe;border:1px solid #bfdbfe;color:var(--blue);display:inline-flex;align-items:center;justify-content:center;align-self:flex-start;line-height:1;font-size:14px;font-weight:950;margin-top:1px}
     .staff-home-note-title{font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:950;color:var(--blue);line-height:1.1}
-    .staff-home-note-text{font-size:11.5px;line-height:1.45;color:var(--text);font-weight:750;margin-top:3px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;word-break:break-word}
-    .staff-note-link{color:var(--blue);font-weight:950;text-decoration:underline;text-underline-offset:3px;word-break:break-all}
+    .staff-home-note-text{font-size:11.5px;line-height:1.45;color:var(--text);font-weight:750;margin-top:3px;display:block;max-height:none;overflow:visible;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
+    .staff-note-link{color:var(--blue);font-weight:950;text-decoration:underline;text-underline-offset:3px;word-break:normal;overflow-wrap:anywhere}
     .staff-note-link::after{content:'↗';font-size:9px;margin-left:3px;text-decoration:none;display:inline-block}
-    .staff-home-note-meta{font-size:9.5px;color:var(--muted);font-weight:850;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .staff-home-note-meta{font-size:9.5px;color:var(--muted);font-weight:850;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     [data-theme="dark"] .staff-home-note-card{background:linear-gradient(135deg,rgba(96,165,250,.12),var(--card));border-color:rgba(96,165,250,.28)}
     [data-theme="dark"] .staff-home-note-ico{background:rgba(96,165,250,.13);border-color:rgba(96,165,250,.28);color:var(--blue)}
     @media(max-width:360px){.staff-home-note-card{padding:8px 9px}.staff-home-note-text{font-size:10.8px;line-height:1.4}.staff-home-note-ico{width:28px;height:28px;min-width:28px}}
@@ -127,7 +127,8 @@ const $=id=>document.getElementById(id), page=$('page');
 function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function normalizeStaffNoteUrl(rawUrl){const url=String(rawUrl||'').trim();if(/^https?:\/\//i.test(url))return url;if(/^www\./i.test(url))return 'https://'+url;return url}
 function openStaffNoteLink(e,rawUrl){if(e)e.preventDefault();const url=normalizeStaffNoteUrl(rawUrl);if(!/^https?:\/\//i.test(url))return false;try{const bridge=window.Android,methods=['openExternalUrl','openExternalLink','openUrl','openBrowser'];if(bridge){for(const m of methods){if(typeof bridge[m]==='function'){bridge[m](url);return false}}}}catch(err){console.warn('open external link bridge failed',err)}const opened=window.open(url,'_blank','noopener,noreferrer');if(!opened)window.location.href=url;return false}
-function linkText(v){const text=String(v||''),rx=/((?:https?:\/\/|www\.)[^\s<>"']+)/gi;let html='',last=0;text.replace(rx,(match,url,offset)=>{html+=esc(text.slice(last,offset));let label=url,trailing='';const tm=label.match(/[),.;!?]+$/);if(tm){trailing=tm[0];label=label.slice(0,-trailing.length)}const href=normalizeStaffNoteUrl(label);if(/^https?:\/\//i.test(href)){html+=`<a class="staff-note-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer" onclick="return openStaffNoteLink(event, this.href)">${esc(label)}</a>${esc(trailing)}`}else{html+=esc(match)}last=offset+match.length;return match});html+=esc(text.slice(last));return html}
+function shortStaffNoteLinkLabel(rawUrl){let clean=String(rawUrl||'').trim(),label=clean.replace(/^https?:\/\//i,'').replace(/^www\./i,'');try{const u=new URL(normalizeStaffNoteUrl(clean));const host=u.hostname.replace(/^www\./i,''),path=u.pathname.replace(/\/+$/,'');const last=decodeURIComponent((path.split('/').filter(Boolean).pop()||'')).replace(/[-_]+/g,' ');label=last?`${host}/…/${last}`:host}catch(e){}return label.length>42?label.slice(0,25)+'…'+label.slice(-12):label}
+function linkText(v){const text=String(v||''),rx=/((?:https?:\/\/|www\.)[^\s<>"']+)/gi;let html='',last=0;text.replace(rx,(match,url,offset)=>{html+=esc(text.slice(last,offset));let raw=url,trailing='';const tm=raw.match(/[),.;!?]+$/);if(tm){trailing=tm[0];raw=raw.slice(0,-trailing.length)}const href=normalizeStaffNoteUrl(raw);if(/^https?:\/\//i.test(href)){const label=shortStaffNoteLinkLabel(raw);html+=`<a class="staff-note-link" href="${esc(href)}" title="${esc(href)}" target="_blank" rel="noopener noreferrer" onclick="return openStaffNoteLink(event, this.href)">${esc(label)}</a>${esc(trailing)}`}else{html+=esc(match)}last=offset+match.length;return match});html+=esc(text.slice(last));return html}
 function key(v){return String(v||'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_\-.]/g,'')}
 function getDeviceId(){
   let id=localStorage.getItem(DEVICE_ID_KEY)||'';
