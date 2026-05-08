@@ -112,7 +112,11 @@ const RECEIPT_TEXT_DOC_ID='__receipt_text_settings';
 const DEFAULT_RECEIPT_TEXT_SETTINGS={storeName:'ROCKY HIJAB',storeSubtext:'',dailyTitle:'TRANSAKSI HARI INI',dateLabel:'Tanggal',cashierLabel:'Kasir',productLabel:'Produk',totalLabel:'Total',countLabel:'Jumlah',footerText:'Terima kasih',bottomFeedLines:6};
 const LIMITS={txToday:120,attMonth:90,manualToday:80,closingsToday:80};
 const REFRESH_COOLDOWN_MS=30000;
+// HYBRID HEMAT READ: realtime tetap aktif, tapi polling cek device diperlambat.
+const DEVICE_SESSION_CHECK_MS=5*60*1000; // sebelumnya 15 detik, sekarang 5 menit
+const DEVICE_SESSION_ACTION_CACHE_MS=30*1000;
 let lastManualRefreshAt=0;
+let lastDeviceSessionCheckAt=0;
 let staffRealtimeUnsubs=[];
 let staffRealtimeStartedFor='';
 const state={user:null,page:'home',pos:null,busy:false,lastSyncMs:0,syncing:false,syncError:'',data:{tx:[],att:[],closings:[],manual:[],bonus:{...DEFAULT_BONUS},headerGuideNote:DEFAULT_HEADER_GUIDE_NOTE,staffDailyNote:{note:DEFAULT_STAFF_DAILY_NOTE,enabled:true},receiptSettings:{...DEFAULT_RECEIPT_TEXT_SETTINGS}}};
@@ -215,10 +219,13 @@ function isDeviceSessionInvalid(fresh){
   if(serverDeviceId&&serverDeviceId!==localDeviceId)return 'Akun ini sudah pindah ke perangkat lain. Silakan hubungi admin.';
   return '';
 }
-async function validateCurrentDeviceSession({silent=true}={}){
+async function validateCurrentDeviceSession({silent=true,force=false}={}){
   if(!state.user||isDailyUser(state.user))return true;
+  const nowMs=Date.now();
+  if(!force&&lastDeviceSessionCheckAt&&nowMs-lastDeviceSessionCheckAt<DEVICE_SESSION_ACTION_CACHE_MS)return true;
   try{
     const u=key(state.user.username), snap=await getDocFromServer(doc(db,'users',u));
+    lastDeviceSessionCheckAt=Date.now();
     if(!snap.exists()){clearSessionAndRender('Akun sudah tidak valid');return false}
     const raw=snap.data()||{}, fresh={id:snap.id,username:raw.username||snap.id,...raw};
     if(isAdmin(fresh)||fresh.active===false||deleted(fresh)){clearSessionAndRender('Akun sudah nonaktif / tidak valid');return false}
@@ -226,6 +233,7 @@ async function validateCurrentDeviceSession({silent=true}={}){
     if(reason){clearSessionAndRender(reason);return false}
     return true;
   }catch(e){
+    lastDeviceSessionCheckAt=Date.now();
     if(!silent)console.warn('device session check skipped',e?.code||e?.message||e);
     return true;
   }
@@ -233,7 +241,7 @@ async function validateCurrentDeviceSession({silent=true}={}){
 function startDeviceSessionWatch(){
   stopDeviceSessionWatch();
   if(!state.user||isDailyUser(state.user))return;
-  deviceSessionTimer=setInterval(()=>validateCurrentDeviceSession({silent:true}),15000);
+  deviceSessionTimer=setInterval(()=>validateCurrentDeviceSession({silent:true}),DEVICE_SESSION_CHECK_MS);
 }
 function stopDeviceSessionWatch(){
   if(deviceSessionTimer){clearInterval(deviceSessionTimer);deviceSessionTimer=null;}
@@ -760,7 +768,7 @@ async function verifyTransactionAllowedServer(dateKeyForTx=todayKey()){
     const reads=[
       getDocsFromServer(query(collection(db,'closings'),where('dateKey','==',d),limit(80)))
     ];
-    if(!isDaily())reads.push(getDocsFromServer(query(collection(db,'attendance'),where('dateKey','==',d),limit(80))));
+    if(!isDaily())reads.push(getDocsFromServer(query(collection(db,'attendance'),where('user','==',u),where('dateKey','==',d),limit(10))));
     const snaps=await Promise.all(reads);
     const closingRows=snaps[0].docs.map(x=>({id:x.id,...x.data()}));
     upsertRows('closings',closingRows);
@@ -796,6 +804,9 @@ async function latestBonusSnapshotForSave(){
     const raw=userSnap.data()||{};
     const fresh={id:userSnap.id,username:raw.username||userSnap.id,...raw};
     if(isAdmin(fresh)||fresh.active===false||deleted(fresh))return {ok:false,msg:'Akun sudah nonaktif / tidak valid.'};
+    const deviceInvalidReason=isDeviceSessionInvalid(fresh);
+    if(deviceInvalidReason)return {ok:false,msg:deviceInvalidReason};
+    lastDeviceSessionCheckAt=Date.now();
     const freshUser={
       username:key(fresh.username||u),
       name:fresh.name||u,
@@ -1147,7 +1158,7 @@ async function serverAttendanceToday(user,dateKey=todayKey()){
     if(direct.exists())return {id:direct.id,...direct.data()};
   }catch(e){console.warn('cek absen direct gagal',e?.code||e)}
   try{
-    const snap=await getDocsFromServer(query(collection(db,'attendance'),where('dateKey','==',d),limit(120)));
+    const snap=await getDocsFromServer(query(collection(db,'attendance'),where('user','==',u),where('dateKey','==',d),limit(10)));
     const rows=snap.docs.map(x=>({id:x.id,...x.data()})).filter(a=>!deleted(a)&&key(a.user)===u&&attDate(a)===d);
     if(rows.length)return sortDesc(rows)[0];
   }catch(e){console.warn('cek absen tanggal gagal',e?.code||e)}
@@ -1161,6 +1172,7 @@ async function clockIn(){
   clockInInFlight=true;
   let pos=state.pos;
   try{
+    if(!await validateCurrentDeviceSession({silent:true,force:true}))return;
     const existing=await serverAttendanceToday(u,d);
     if(existing){
       state.data.att=dedupeAttendanceRows([{id:existing.id,...existing},...state.data.att]);
