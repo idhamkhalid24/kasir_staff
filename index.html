@@ -1988,7 +1988,7 @@ const STAFF_DAILY_NOTE_DOC_ID='__staff_daily_home_note';
 const DEFAULT_STAFF_DAILY_NOTE='Semangat bekerja hari ini. Pastikan transaksi dicatat dengan benar dan refresh jika data belum masuk.';
 const RECEIPT_TEXT_DOC_ID='__receipt_text_settings';
 const DEFAULT_RECEIPT_TEXT_SETTINGS={storeName:'ROCKY HIJAB',storeSubtext:'',dailyTitle:'TRANSAKSI HARI INI',dateLabel:'Tanggal',cashierLabel:'Kasir',productLabel:'Produk',totalLabel:'Total',countLabel:'Jumlah',footerText:'Terima kasih',bottomFeedLines:6};
-const LIMITS={txToday:120,attMonth:90,manualToday:80,closingsToday:80};
+const LIMITS={txToday:120,attMonth:90,manualToday:80,closingsToday:80,txBonusAll:2000,manualBonusAll:1000,closingsAll:1500};
 const REFRESH_COOLDOWN_MS=30000;
 // HYBRID HEMAT READ: realtime tetap aktif, tapi polling cek device diperlambat.
 const DEVICE_SESSION_CHECK_MS=5*60*1000; // sebelumnya 15 detik, sekarang 5 menit
@@ -2507,12 +2507,12 @@ async function loadStaffData(opts={}){
   const u=key(state.user.username), silent=opts.silent===true, d=todayKey();
   if(!silent)showLoad(true);
   try{
-    // Load awal dibuat ringan: transaksi & bonus manual hanya hari ini.
-    // Total masuk kerja tetap memakai attendance user terbaru secukupnya untuk bulan berjalan.
+    // Load awal tetap ringan untuk absen, tapi transaksi & bonus manual user diambil lintas tanggal
+    // supaya kartu Bonus++ menghitung total keseluruhan, bukan reset saat tanggal berganti.
     const [tx,att,manual,bs,userSnap,guideNoteSnap,staffDailyNoteSnap,receiptTextSnap]=await Promise.all([
-      getDocs(query(collection(db,'transactions'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.txToday))),
+      getDocs(query(collection(db,'transactions'),where('user','==',u),limit(LIMITS.txBonusAll))),
       getDocs(query(collection(db,'attendance'),where('user','==',u),limit(LIMITS.attMonth))),
-      getDocs(query(collection(db,'manualBonuses'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.manualToday))),
+      getDocs(query(collection(db,'manualBonuses'),where('user','==',u),limit(LIMITS.manualBonusAll))),
       getDocFromServer(doc(db,'closings','__bonus_settings')),
       getDocFromServer(doc(db,'users',u)),
       getDocFromServer(doc(db,'closings',HEADER_GUIDE_NOTE_DOC_ID)).catch(()=>null),
@@ -2522,10 +2522,10 @@ async function loadStaffData(opts={}){
 
     let closingRows=[];
     try{
-      const todayRows=await getQueryDocs(()=>query(collection(db,'closings'),where('dateKey','==',d),limit(LIMITS.closingsToday)),()=>query(collection(db,'closings'),where('dateKey','==',d),limit(LIMITS.closingsToday)));
-      closingRows=todayRows.docs.map(x=>({id:x.id,...x.data()}));
+      const allRows=await getQueryDocs(()=>query(collection(db,'closings'),limit(LIMITS.closingsAll)),()=>query(collection(db,'closings'),limit(LIMITS.closingsAll)));
+      closingRows=allRows.docs.map(x=>({id:x.id,...x.data()}));
     }catch(closeErr){
-      console.warn('closing today query gagal',closeErr?.code||closeErr);
+      console.warn('closing all query gagal',closeErr?.code||closeErr);
       closingRows=[];
     }
 
@@ -2632,9 +2632,10 @@ function manualBonusRowsForDate(dateKey=todayKey()){
   const d=String(dateKey||todayKey()).slice(0,10);
   return sortDesc((state.data.manual||[]).filter(b=>!deleted(b)&&manualBonusDate(b)===d&&Number(b.amount||0)!==0));
 }
+function manualBonusRowsAll(){return sortDesc((state.data.manual||[]).filter(b=>!deleted(b)&&Number(b.amount||0)!==0))}
 function manualBonusToday(){return manualBonusRowsForDate(todayKey()).reduce((sum,b)=>sum+Number(b.amount||0),0)}
-function manualBonus(){return manualBonusToday()}
-function activeClosings(){const d=todayKey();return state.data.closings.filter(c=>c&&c.closed===true&&c.canceled!==true&&!deleted(c)&&String(c.dateKey||'')===d)}
+function manualBonus(){return manualBonusRowsAll().reduce((sum,b)=>sum+Number(b.amount||0),0)}
+function activeClosings(){return state.data.closings.filter(c=>c&&c.closed===true&&c.canceled!==true&&!deleted(c))}
 function closingScope(c){return String(c?.scope||(c?.user?'user':'global')).toLowerCase()}
 function closingBonusValue(c){
   if(!c||c.closed!==true)return 0;
@@ -2663,7 +2664,7 @@ function closingBonusRows(){
 }
 function closingBonus(){return closingBonusRows().reduce((sum,x)=>sum+Number(x.val||0),0)}
 function closingCount(){return closingBonusRows().length}
-function trxBonus(){return txBonusSum(todayTx())}
+function trxBonus(){return txBonusSum(liveTx())}
 function totalBonus(){return trxBonus()+closingBonus()+manualBonus()}
 function todayClosing(){
   const d=todayKey(), u=key(state.user?.username);
