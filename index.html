@@ -575,14 +575,12 @@ async function loadStaffData(opts={}){
   const u=key(state.user.username), silent=opts.silent===true, d=todayKey(), m=monthKey();
   if(!silent)showLoad(true);
   try{
-    // Data mengikuti pola server/admin: gabung data bulan ini + hari ini.
-    // Bonus Hari Ini memakai filter tanggal hari ini, sedangkan Bonus ++ memakai data bulan ini.
-    const [txMonthSnap,txTodaySnap,att,manualMonthSnap,manualTodaySnap,bs,userSnap,guideNoteSnap,staffDailyNoteSnap,receiptTextSnap]=await Promise.all([
+    // Data dibuat tetap ringan: cukup ambil data bulan ini satu kali.
+    // Bonus Hari Ini difilter dari data bulan ini ke tanggal hari ini, Bonus ++ memakai total bulan ini.
+    const [txMonthSnap,att,manualMonthSnap,bs,userSnap,guideNoteSnap,staffDailyNoteSnap,receiptTextSnap]=await Promise.all([
       getQueryDocs(()=>query(collection(db,'transactions'),where('user','==',u),where('monthKey','==',m),limit(LIMITS.txMonth)),()=>query(collection(db,'transactions'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.txToday))),
-      getDocs(query(collection(db,'transactions'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.txToday))),
       getDocs(query(collection(db,'attendance'),where('user','==',u),limit(LIMITS.attMonth))),
       getQueryDocs(()=>query(collection(db,'manualBonuses'),where('user','==',u),where('monthKey','==',m),limit(LIMITS.manualMonth)),()=>query(collection(db,'manualBonuses'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.manualToday))),
-      getDocs(query(collection(db,'manualBonuses'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.manualToday))),
       getDocFromServer(doc(db,'closings','__bonus_settings')),
       getDocFromServer(doc(db,'users',u)),
       getDocFromServer(doc(db,'closings',HEADER_GUIDE_NOTE_DOC_ID)).catch(()=>null),
@@ -592,19 +590,16 @@ async function loadStaffData(opts={}){
 
     let closingRows=[];
     try{
-      const [monthRows,todayRows]=await Promise.all([
-        getQueryDocs(()=>query(collection(db,'closings'),where('monthKey','==',m),limit(LIMITS.closingsMonth)),()=>query(collection(db,'closings'),where('dateKey','==',d),limit(LIMITS.closingsToday))),
-        getDocs(query(collection(db,'closings'),where('dateKey','==',d),limit(LIMITS.closingsToday)))
-      ]);
-      closingRows=mergeById(monthRows.docs.map(x=>({id:x.id,...x.data()})),todayRows.docs.map(x=>({id:x.id,...x.data()})));
+      const monthRows=await getQueryDocs(()=>query(collection(db,'closings'),where('monthKey','==',m),limit(LIMITS.closingsMonth)),()=>query(collection(db,'closings'),where('dateKey','==',d),limit(LIMITS.closingsToday)));
+      closingRows=monthRows.docs.map(x=>({id:x.id,...x.data()}));
     }catch(closeErr){
       console.warn('closing query gagal',closeErr?.code||closeErr);
       closingRows=[];
     }
 
-    state.data.tx=mergeById(txMonthSnap.docs.map(x=>({id:x.id,...x.data()})),txTodaySnap.docs.map(x=>({id:x.id,...x.data()}))).filter(t=>txMonth(t)===m||txDate(t)===d);
+    state.data.tx=sortDesc(txMonthSnap.docs.map(x=>({id:x.id,...x.data()})).filter(t=>txMonth(t)===m||txDate(t)===d));
     state.data.att=dedupeAttendanceRows(att.docs.map(x=>({id:x.id,...x.data()})));
-    state.data.manual=mergeById(manualMonthSnap.docs.map(x=>({...(x.data()||{}),id:x.id,docId:x.id})),manualTodaySnap.docs.map(x=>({...(x.data()||{}),id:x.id,docId:x.id}))).filter(b=>!deleted(b)&&(manualBonusMonth(b)===m||manualBonusDate(b)===d));
+    state.data.manual=sortDesc(manualMonthSnap.docs.map(x=>({...(x.data()||{}),id:x.id,docId:x.id})).filter(b=>!deleted(b)&&(manualBonusMonth(b)===m||manualBonusDate(b)===d)));
     state.data.closings=sortDesc(closingRows.filter(c=>c.id!=='__bonus_settings'&&c.dateKey!=='__bonus_settings'&&c.id!=='__risma_manual_closing'&&c.dateKey!=='__risma_manual_closing'&&c.id!==HEADER_GUIDE_NOTE_DOC_ID&&c.dateKey!==HEADER_GUIDE_NOTE_DOC_ID&&c.id!==STAFF_DAILY_NOTE_DOC_ID&&c.dateKey!==STAFF_DAILY_NOTE_DOC_ID&&c.id!==RECEIPT_TEXT_DOC_ID&&c.dateKey!==RECEIPT_TEXT_DOC_ID&&c.type!=='bonus_settings'&&c.type!=='closing_manual_config'&&c.type!=='header_guide_note'&&c.type!=='staff_daily_home_note'&&c.type!=='receipt_text_settings'));
     state.data.headerGuideNote=(guideNoteSnap&&guideNoteSnap.exists())?String((guideNoteSnap.data()||{}).note||DEFAULT_HEADER_GUIDE_NOTE):DEFAULT_HEADER_GUIDE_NOTE;
     state.data.staffDailyNote=(staffDailyNoteSnap&&staffDailyNoteSnap.exists())?{note:DEFAULT_STAFF_DAILY_NOTE,enabled:true,...(staffDailyNoteSnap.data()||{})}:{note:DEFAULT_STAFF_DAILY_NOTE,enabled:true,updatedAtMs:0,updatedByName:''};
