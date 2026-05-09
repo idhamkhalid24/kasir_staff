@@ -3270,17 +3270,19 @@ function go(p,opts={}){
   syncAppBrowserHistory(p,opts.replace?'replace':'push');
   render();
 }
-function appBack(){
+function appBack(opts={}){
+  const silentHome=!!(opts&&opts.silentHome);
   try{closeModal()}catch(e){}
-  if(!state.user)return;
+  if(!state.user)return false;
   if(state.page!=='home'){
     state.page='home';
     syncAppBrowserHistory('home','push');
     render();
-    return;
+    return true;
   }
-  toast('Sudah di halaman utama');
+  if(!silentHome)toast('Sudah di halaman utama');
   syncAppBrowserHistory('home','replace');
+  return true;
 }
 function installSafeBackNavigation(){
   if(window.__ROCKY_SAFE_BACK_INSTALLED__)return;
@@ -3333,7 +3335,7 @@ function installSwipeBack(){
     if(!ptr.active)return;
     const dx=ptr.lastX-ptr.startX,dy=ptr.lastY-ptr.startY,ok=ptr.ready&&dx<-74&&Math.abs(dx)>Math.abs(dy)*1.35;
     reset();
-    if(ok)appBack();
+    if(ok)appBack({silentHome:true,source:'swipe'});
   },{passive:true});
   document.addEventListener('touchcancel',reset,{passive:true});
 }
