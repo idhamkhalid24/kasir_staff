@@ -2202,11 +2202,14 @@ function globalTransactionBonusRate(){const r=Number(state.data.bonus?.transacti
 function globalClosingBonusPerMinute(){const n=Number(state.data.bonus?.closingBonusPerMinute);return Number.isFinite(n)&&n>=0?n:DEFAULT_BONUS.closingBonusPerMinute}
 function userTransactionBonusRate(user=state.user){
   const u=user||{};
-  if(hasBonusValue(u.transactionBonusRate)){const r=Number(u.transactionBonusRate);if(Number.isFinite(r)&&r>=0)return r}
+  if(hasBonusValue(u.transactionBonusRate)){const r=Number(u.transactionBonusRate);if(Number.isFinite(r)&&r>0)return r}
   if(hasBonusValue(u.transactionBonusPercent)){const p=Number(u.transactionBonusPercent);if(Number.isFinite(p)&&p>=0)return p/100}
+  if(hasBonusValue(u.transactionBonusRate)){const r=Number(u.transactionBonusRate);if(Number.isFinite(r)&&r>=0)return r}
   if(isDailyUser(u)){
-    const r=Number(u.dailyBonusRate);if(Number.isFinite(r)&&r>=0)return r;
-    const p=Number(u.dailyBonusPercent);if(Number.isFinite(p)&&p>=0)return p/100;
+    const hasDailyRate=hasBonusValue(u.dailyBonusRate), hasDailyPercent=hasBonusValue(u.dailyBonusPercent);
+    if(hasDailyRate){const r=Number(u.dailyBonusRate);if(Number.isFinite(r)&&r>0)return r}
+    if(hasDailyPercent){const p=Number(u.dailyBonusPercent);if(Number.isFinite(p)&&p>=0)return p/100}
+    if(hasDailyRate){const r=Number(u.dailyBonusRate);if(Number.isFinite(r)&&r>=0)return r}
   }
   return globalTransactionBonusRate();
 }
@@ -2521,8 +2524,8 @@ function startStaffRealtime(){
       transactionBonusRate:hasBonusValue(fresh.transactionBonusRate)?Number(fresh.transactionBonusRate):null,
       transactionBonusPercent:hasBonusValue(fresh.transactionBonusPercent)?Number(fresh.transactionBonusPercent):null,
       closingBonusPerMinute:isDailyUser(fresh)?0:(hasBonusValue(fresh.closingBonusPerMinute)?Number(fresh.closingBonusPerMinute):null),
-      dailyBonusRate:Number(fresh.dailyBonusRate||0),
-      dailyBonusPercent:Number(fresh.dailyBonusPercent||0),
+      dailyBonusRate:hasBonusValue(fresh.dailyBonusRate)?Number(fresh.dailyBonusRate):null,
+      dailyBonusPercent:hasBonusValue(fresh.dailyBonusPercent)?Number(fresh.dailyBonusPercent):null,
       active:fresh.active!==false,
       deviceId:isDailyUser(fresh)?'':String(fresh.deviceId||state.user?.deviceId||''),
       deviceResetAtMs:Number(fresh.deviceResetAtMs||state.user?.deviceResetAtMs||0)
@@ -2578,8 +2581,8 @@ async function loadStaffData(opts={}){
         transactionBonusRate:hasBonusValue(fresh.transactionBonusRate)?Number(fresh.transactionBonusRate):null,
         transactionBonusPercent:hasBonusValue(fresh.transactionBonusPercent)?Number(fresh.transactionBonusPercent):null,
         closingBonusPerMinute:isDailyUser(fresh)?0:(hasBonusValue(fresh.closingBonusPerMinute)?Number(fresh.closingBonusPerMinute):null),
-        dailyBonusRate:Number(fresh.dailyBonusRate||0),
-        dailyBonusPercent:Number(fresh.dailyBonusPercent||0),
+        dailyBonusRate:hasBonusValue(fresh.dailyBonusRate)?Number(fresh.dailyBonusRate):null,
+        dailyBonusPercent:hasBonusValue(fresh.dailyBonusPercent)?Number(fresh.dailyBonusPercent):null,
         active:fresh.active!==false,
         deviceId:isDailyUser(fresh)?'':String(fresh.deviceId||state.user?.deviceId||''),
         deviceResetAtMs:Number(fresh.deviceResetAtMs||state.user?.deviceResetAtMs||0)
@@ -2778,8 +2781,8 @@ async function latestBonusSnapshotForSave(){
       transactionBonusRate:hasBonusValue(fresh.transactionBonusRate)?Number(fresh.transactionBonusRate):null,
       transactionBonusPercent:hasBonusValue(fresh.transactionBonusPercent)?Number(fresh.transactionBonusPercent):null,
       closingBonusPerMinute:isDailyUser(fresh)?0:(hasBonusValue(fresh.closingBonusPerMinute)?Number(fresh.closingBonusPerMinute):null),
-      dailyBonusRate:Number(fresh.dailyBonusRate||0),
-      dailyBonusPercent:Number(fresh.dailyBonusPercent||0),
+      dailyBonusRate:hasBonusValue(fresh.dailyBonusRate)?Number(fresh.dailyBonusRate):null,
+      dailyBonusPercent:hasBonusValue(fresh.dailyBonusPercent)?Number(fresh.dailyBonusPercent):null,
       active:fresh.active!==false,
       deviceId:isDailyUser(fresh)?'':String(fresh.deviceId||state.user?.deviceId||''),
       deviceResetAtMs:Number(fresh.deviceResetAtMs||state.user?.deviceResetAtMs||0)
@@ -3188,7 +3191,7 @@ async function login(){
     if(String(data.pin||'')!==p)throw new Error('PIN salah');
     const lock=await verifyDeviceLockForLogin(data,u);
     if(!lock.ok)throw new Error(lock.msg);
-    state.user={username:key(data.username||u),name:data.name||u,pin:String(data.pin||''),role:data.role||'staff',transactionBonusRate:hasBonusValue(data.transactionBonusRate)?Number(data.transactionBonusRate):null,transactionBonusPercent:hasBonusValue(data.transactionBonusPercent)?Number(data.transactionBonusPercent):null,closingBonusPerMinute:isDailyUser(data)?0:(hasBonusValue(data.closingBonusPerMinute)?Number(data.closingBonusPerMinute):null),dailyBonusRate:Number(data.dailyBonusRate||0),dailyBonusPercent:Number(data.dailyBonusPercent||0),active:data.active!==false,deviceId:lock.deviceId,deviceResetAtMs:Number(data.deviceResetAtMs||0)};
+    state.user={username:key(data.username||u),name:data.name||u,pin:String(data.pin||''),role:data.role||'staff',transactionBonusRate:hasBonusValue(data.transactionBonusRate)?Number(data.transactionBonusRate):null,transactionBonusPercent:hasBonusValue(data.transactionBonusPercent)?Number(data.transactionBonusPercent):null,closingBonusPerMinute:isDailyUser(data)?0:(hasBonusValue(data.closingBonusPerMinute)?Number(data.closingBonusPerMinute):null),dailyBonusRate:hasBonusValue(data.dailyBonusRate)?Number(data.dailyBonusRate):null,dailyBonusPercent:hasBonusValue(data.dailyBonusPercent)?Number(data.dailyBonusPercent):null,active:data.active!==false,deviceId:lock.deviceId,deviceResetAtMs:Number(data.deviceResetAtMs||0)};
     const saved={username:state.user.username,name:state.user.name,pin:state.user.pin,role:state.user.role,transactionBonusRate:state.user.transactionBonusRate,transactionBonusPercent:state.user.transactionBonusPercent,closingBonusPerMinute:isDailyUser(state.user)?0:state.user.closingBonusPerMinute,dailyBonusRate:state.user.dailyBonusRate,dailyBonusPercent:state.user.dailyBonusPercent,active:true,deviceId:state.user.deviceId,deviceResetAtMs:state.user.deviceResetAtMs};
     localStorage.setItem(SESSION,JSON.stringify(saved));
     localStorage.setItem(LEGACY_SESSION,JSON.stringify({username:state.user.username,pin:state.user.pin}));
@@ -3240,7 +3243,7 @@ async function boot(){
           toast(lock.msg);
           break;
         }
-        state.user={username:key(data.username||username),name:data.name||username,pin:String(data.pin||''),role:data.role||'staff',transactionBonusRate:hasBonusValue(data.transactionBonusRate)?Number(data.transactionBonusRate):null,transactionBonusPercent:hasBonusValue(data.transactionBonusPercent)?Number(data.transactionBonusPercent):null,closingBonusPerMinute:isDailyUser(data)?0:(hasBonusValue(data.closingBonusPerMinute)?Number(data.closingBonusPerMinute):null),dailyBonusRate:Number(data.dailyBonusRate||0),dailyBonusPercent:Number(data.dailyBonusPercent||0),active:data.active!==false,deviceId:lock.deviceId,deviceResetAtMs:Number(data.deviceResetAtMs||0)};
+        state.user={username:key(data.username||username),name:data.name||username,pin:String(data.pin||''),role:data.role||'staff',transactionBonusRate:hasBonusValue(data.transactionBonusRate)?Number(data.transactionBonusRate):null,transactionBonusPercent:hasBonusValue(data.transactionBonusPercent)?Number(data.transactionBonusPercent):null,closingBonusPerMinute:isDailyUser(data)?0:(hasBonusValue(data.closingBonusPerMinute)?Number(data.closingBonusPerMinute):null),dailyBonusRate:hasBonusValue(data.dailyBonusRate)?Number(data.dailyBonusRate):null,dailyBonusPercent:hasBonusValue(data.dailyBonusPercent)?Number(data.dailyBonusPercent):null,active:data.active!==false,deviceId:lock.deviceId,deviceResetAtMs:Number(data.deviceResetAtMs||0)};
         const saved={username:state.user.username,name:state.user.name,pin:state.user.pin,role:state.user.role,transactionBonusRate:state.user.transactionBonusRate,transactionBonusPercent:state.user.transactionBonusPercent,closingBonusPerMinute:isDailyUser(state.user)?0:state.user.closingBonusPerMinute,dailyBonusRate:state.user.dailyBonusRate,dailyBonusPercent:state.user.dailyBonusPercent,active:true,deviceId:state.user.deviceId,deviceResetAtMs:state.user.deviceResetAtMs};
         localStorage.setItem(SESSION,JSON.stringify(saved));
         localStorage.setItem(LEGACY_SESSION,JSON.stringify({username:state.user.username,pin:state.user.pin}));
