@@ -1804,6 +1804,86 @@
 
   
 
+    /* ===== REVISI: LOGIN MENYESUAIKAN KEYBOARD ===== */
+    .page:has(.login){
+      min-height:var(--app-vvh)!important;
+      padding:0!important;
+      overflow:auto!important;
+      overscroll-behavior:contain!important;
+    }
+    .login{
+      min-height:var(--app-vvh)!important;
+      height:auto!important;
+      padding-top:clamp(16px,calc((var(--app-vvh) - 500px)/2),34px)!important;
+      padding-bottom:16px!important;
+      overflow:auto!important;
+      -webkit-overflow-scrolling:touch!important;
+    }
+    .login:focus-within{
+      align-items:flex-start!important;
+      justify-content:flex-start!important;
+      min-height:var(--app-vvh)!important;
+      padding:8px 14px 8px!important;
+    }
+    .login:focus-within .login-card{
+      max-height:calc(var(--app-vvh) - 16px)!important;
+      overflow:auto!important;
+      gap:8px!important;
+      overscroll-behavior:contain!important;
+      -webkit-overflow-scrolling:touch!important;
+    }
+    .login:focus-within .hero{
+      padding:12px 14px 11px!important;
+      border-radius:18px!important;
+    }
+    .login:focus-within .hero .big{
+      font-size:23px!important;
+      margin-bottom:5px!important;
+      line-height:1.05!important;
+    }
+    .login:focus-within .hero .sub{
+      font-size:10.5px!important;
+      line-height:1.15!important;
+    }
+    .login:focus-within .card{
+      margin-top:6px!important;
+      padding:13px!important;
+      border-radius:17px!important;
+    }
+    .login:focus-within .field{
+      margin-bottom:8px!important;
+      gap:4px!important;
+    }
+    .login:focus-within input{
+      min-height:42px!important;
+      padding:9px 12px!important;
+      font-size:14px!important;
+      border-radius:12px!important;
+    }
+    .login:focus-within .btn{
+      min-height:42px!important;
+      padding:9px 12px!important;
+      font-size:14px!important;
+      border-radius:12px!important;
+    }
+    .login:focus-within .hint{
+      margin-top:7px!important;
+      font-size:10.8px!important;
+      line-height:1.25!important;
+    }
+    @media(max-height:430px){
+      .login:focus-within{padding:6px 12px!important}
+      .login:focus-within .login-card{max-height:calc(var(--app-vvh) - 12px)!important;gap:6px!important}
+      .login:focus-within .hero{padding:9px 12px!important}
+      .login:focus-within .hero .big{font-size:20px!important;margin-bottom:3px!important}
+      .login:focus-within .hero .sub{font-size:9.5px!important}
+      .login:focus-within .card{padding:11px!important;margin-top:5px!important}
+      .login:focus-within input,.login:focus-within .btn{min-height:38px!important;font-size:13.5px!important}
+      .login:focus-within .label{font-size:9.8px!important}
+      .login:focus-within .hint{font-size:10px!important;margin-top:5px!important}
+    }
+
+
     /* ===== FINAL DEPLOY: LOGIC/FITUR TETAP STAFV1, ICON PRINTER VIA CSS SAJA ===== */
     .tx-print-btn{
       font-size:0!important;
@@ -1885,6 +1965,21 @@ if(window.visualViewport){
 }
 window.addEventListener('resize',updateVisualViewportForKeyboard);
 window.addEventListener('orientationchange',()=>setTimeout(updateVisualViewportForKeyboard,120));
+function keepLoginInputVisible(){
+  setTimeout(()=>{
+    const el=document.activeElement;
+    if(el&&el.closest&&el.closest('.login')){
+      try{el.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'})}catch(e){el.scrollIntoView(false)}
+    }
+  },90);
+}
+document.addEventListener('focusin',keepLoginInputVisible,true);
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',()=>{
+    const el=document.activeElement;
+    if(el&&el.closest&&el.closest('.login'))keepLoginInputVisible();
+  });
+}
 
 function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function normalizeStaffNoteUrl(rawUrl){const url=String(rawUrl||'').trim();if(/^https?:\/\//i.test(url))return url;if(/^www\./i.test(url))return 'https://'+url;return url}
