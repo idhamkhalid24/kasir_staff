@@ -3272,6 +3272,7 @@ function go(p,opts={}){
 }
 function appBack(opts={}){
   const silentHome=!!(opts&&opts.silentHome);
+  const source=opts&&opts.source?String(opts.source):'';
   try{closeModal()}catch(e){}
   if(!state.user)return false;
   if(state.page!=='home'){
@@ -3280,8 +3281,9 @@ function appBack(opts={}){
     render();
     return true;
   }
-  if(!silentHome)toast('Sudah di halaman utama');
   syncAppBrowserHistory('home','replace');
+  if(source==='nativeBack')return false;
+  if(!silentHome)toast('Sudah di halaman utama');
   return true;
 }
 function installSafeBackNavigation(){
