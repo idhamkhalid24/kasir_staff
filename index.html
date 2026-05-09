@@ -110,7 +110,7 @@ const STAFF_DAILY_NOTE_DOC_ID='__staff_daily_home_note';
 const DEFAULT_STAFF_DAILY_NOTE='Semangat bekerja hari ini. Pastikan transaksi dicatat dengan benar dan refresh jika data belum masuk.';
 const RECEIPT_TEXT_DOC_ID='__receipt_text_settings';
 const DEFAULT_RECEIPT_TEXT_SETTINGS={storeName:'ROCKY HIJAB',storeSubtext:'',dailyTitle:'TRANSAKSI HARI INI',dateLabel:'Tanggal',cashierLabel:'Kasir',productLabel:'Produk',totalLabel:'Total',countLabel:'Jumlah',footerText:'Terima kasih',bottomFeedLines:6};
-const LIMITS={txToday:120,txMonth:600,attMonth:90,manualToday:80,manualMonth:300,closingsToday:80,closingsMonth:180};
+const LIMITS={txToday:120,attMonth:90,manualToday:80,closingsToday:80};
 const REFRESH_COOLDOWN_MS=30000;
 // HYBRID HEMAT READ: realtime tetap aktif, tapi polling cek device diperlambat.
 const DEVICE_SESSION_CHECK_MS=5*60*1000; // sebelumnya 15 detik, sekarang 5 menit
@@ -258,7 +258,6 @@ function ms(r){const n=Number(r?.createdAtMs||r?.updatedAtMs||r?.deletedAtMs||0)
 function timeID(m){if(!m)return '--:--';const p=parts(new Date(m));return `${p.hour}:${p.minute}`}
 function deleted(x){return x?.deleted===true||x?.deleted==='true'}
 function sortDesc(a){return [...(a||[])].sort((x,y)=>ms(y)-ms(x))}
-function mergeById(...groups){const map=new Map();groups.flat().forEach(item=>{if(!item)return;const id=String(item.id||item.docId||item.clientId||'');if(id)map.set(id,{...(map.get(id)||{}),...item});else map.set('noid_'+map.size,item)});return sortDesc([...map.values()])}
 function isAdmin(u){return key(u?.role)==='admin'||ADMIN.includes(key(u?.username||u?.id))}
 function isDailyUser(user=state.user){const r=key(user?.role);return r==='harian'||r==='daily'||r==='karyawan_harian'}
 function isDaily(){return isDailyUser(state.user)}
@@ -572,15 +571,15 @@ function startStaffRealtime(){
 }
 async function loadStaffData(opts={}){
   if(!state.user)return;
-  const u=key(state.user.username), silent=opts.silent===true, d=todayKey(), m=monthKey();
+  const u=key(state.user.username), silent=opts.silent===true, d=todayKey();
   if(!silent)showLoad(true);
   try{
-    // Data dibuat tetap ringan: cukup ambil data bulan ini satu kali.
-    // Bonus Hari Ini difilter dari data bulan ini ke tanggal hari ini, Bonus ++ memakai total bulan ini.
-    const [txMonthSnap,att,manualMonthSnap,bs,userSnap,guideNoteSnap,staffDailyNoteSnap,receiptTextSnap]=await Promise.all([
-      getQueryDocs(()=>query(collection(db,'transactions'),where('user','==',u),where('monthKey','==',m),limit(LIMITS.txMonth)),()=>query(collection(db,'transactions'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.txToday))),
+    // Load awal dibuat ringan: transaksi & bonus manual hanya hari ini.
+    // Total masuk kerja tetap memakai attendance user terbaru secukupnya untuk bulan berjalan.
+    const [tx,att,manual,bs,userSnap,guideNoteSnap,staffDailyNoteSnap,receiptTextSnap]=await Promise.all([
+      getDocs(query(collection(db,'transactions'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.txToday))),
       getDocs(query(collection(db,'attendance'),where('user','==',u),limit(LIMITS.attMonth))),
-      getQueryDocs(()=>query(collection(db,'manualBonuses'),where('user','==',u),where('monthKey','==',m),limit(LIMITS.manualMonth)),()=>query(collection(db,'manualBonuses'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.manualToday))),
+      getDocs(query(collection(db,'manualBonuses'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.manualToday))),
       getDocFromServer(doc(db,'closings','__bonus_settings')),
       getDocFromServer(doc(db,'users',u)),
       getDocFromServer(doc(db,'closings',HEADER_GUIDE_NOTE_DOC_ID)).catch(()=>null),
@@ -590,16 +589,16 @@ async function loadStaffData(opts={}){
 
     let closingRows=[];
     try{
-      const monthRows=await getQueryDocs(()=>query(collection(db,'closings'),where('monthKey','==',m),limit(LIMITS.closingsMonth)),()=>query(collection(db,'closings'),where('dateKey','==',d),limit(LIMITS.closingsToday)));
-      closingRows=monthRows.docs.map(x=>({id:x.id,...x.data()}));
+      const todayRows=await getQueryDocs(()=>query(collection(db,'closings'),where('dateKey','==',d),limit(LIMITS.closingsToday)),()=>query(collection(db,'closings'),where('dateKey','==',d),limit(LIMITS.closingsToday)));
+      closingRows=todayRows.docs.map(x=>({id:x.id,...x.data()}));
     }catch(closeErr){
-      console.warn('closing query gagal',closeErr?.code||closeErr);
+      console.warn('closing today query gagal',closeErr?.code||closeErr);
       closingRows=[];
     }
 
-    state.data.tx=sortDesc(txMonthSnap.docs.map(x=>({id:x.id,...x.data()})).filter(t=>txMonth(t)===m||txDate(t)===d));
+    state.data.tx=sortDesc(tx.docs.map(x=>({id:x.id,...x.data()})));
     state.data.att=dedupeAttendanceRows(att.docs.map(x=>({id:x.id,...x.data()})));
-    state.data.manual=sortDesc(manualMonthSnap.docs.map(x=>({...(x.data()||{}),id:x.id,docId:x.id})).filter(b=>!deleted(b)&&(manualBonusMonth(b)===m||manualBonusDate(b)===d)));
+    state.data.manual=sortDesc(manual.docs.map(x=>({...(x.data()||{}),id:x.id,docId:x.id})).filter(b=>!deleted(b)));
     state.data.closings=sortDesc(closingRows.filter(c=>c.id!=='__bonus_settings'&&c.dateKey!=='__bonus_settings'&&c.id!=='__risma_manual_closing'&&c.dateKey!=='__risma_manual_closing'&&c.id!==HEADER_GUIDE_NOTE_DOC_ID&&c.dateKey!==HEADER_GUIDE_NOTE_DOC_ID&&c.id!==STAFF_DAILY_NOTE_DOC_ID&&c.dateKey!==STAFF_DAILY_NOTE_DOC_ID&&c.id!==RECEIPT_TEXT_DOC_ID&&c.dateKey!==RECEIPT_TEXT_DOC_ID&&c.type!=='bonus_settings'&&c.type!=='closing_manual_config'&&c.type!=='header_guide_note'&&c.type!=='staff_daily_home_note'&&c.type!=='receipt_text_settings'));
     state.data.headerGuideNote=(guideNoteSnap&&guideNoteSnap.exists())?String((guideNoteSnap.data()||{}).note||DEFAULT_HEADER_GUIDE_NOTE):DEFAULT_HEADER_GUIDE_NOTE;
     state.data.staffDailyNote=(staffDailyNoteSnap&&staffDailyNoteSnap.exists())?{note:DEFAULT_STAFF_DAILY_NOTE,enabled:true,...(staffDailyNoteSnap.data()||{})}:{note:DEFAULT_STAFF_DAILY_NOTE,enabled:true,updatedAtMs:0,updatedByName:''};
@@ -696,86 +695,43 @@ function monthlyAttendancePerformance(){const m=monthKey();const rows=dedupeAtte
 function averageAttendanceCard(){if(isDaily())return '';const p=monthlyAttendancePerformance();if(!p)return `<div class="card avg-att-card"><div class="between"><div class="avg-att-head"><span class="avg-att-ico">⏱</span><div><div class="label">Rata-rata Jam Absen</div><div class="hint" style="margin-top:4px">${monthID(monthKey())} · belum ada data</div></div></div><div class="avg-att-metric"><div class="stat-val" style="color:var(--muted)">--:--</div></div></div></div>`;const cls=p.isGood?'avg-good':'avg-warn',pill=p.isGood?'green':'amber',txt=p.isGood?'Performa baik':'Perlu ditingkatkan';return `<div class="card avg-att-card ${cls}"><div class="between"><div class="avg-att-head"><span class="avg-att-ico">⏱</span><div><div class="label">Rata-rata Jam Absen</div><div class="hint" style="margin-top:4px">${monthID(monthKey())} · ${p.count} hari hadir</div></div></div><div class="avg-att-metric"><div class="stat-val">${p.avgLabel}</div><span class="pill ${pill}">${txt}</span></div></div></div>`}
 function hasAttendOn(dateKey){const u=key(state.user?.username),d=String(dateKey||'').slice(0,10);return dedupeAttendanceRows(state.data.att).some(a=>!deleted(a)&&attDate(a)===d&&(!u||key(a.user)===u))}
 function rate(){return userTransactionBonusRate()}
-function bonusRecordDateKey(record){return String(record?.dateKey||record?.bonusDate||record?.date||(ms(record)?todayKey(new Date(ms(record))):'')).slice(0,10)}
-function bonusRecordMonthKey(record){const m=String(record?.monthKey||'').slice(0,7);if(/^\d{4}-\d{2}$/.test(m))return m;const d=bonusRecordDateKey(record);return d?d.slice(0,7):''}
-function manualBonusMonth(b){return bonusRecordMonthKey(b)||monthKey()}
-function normalizeBonusPeriod(period=monthKey()){
-  if(period&&typeof period==='object'){
-    const type=period.type||(period.dateKey?'daily':'monthly');
-    const dateKey=String(period.dateKey||'').slice(0,10);
-    const monthRaw=String(period.monthKey||period.month||(dateKey?dateKey.slice(0,7):monthKey())).slice(0,7);
-    return{type,dateKey,monthKey:monthRaw||monthKey()};
-  }
-  const raw=String(period||monthKey());
-  if(/^\d{4}-\d{2}-\d{2}$/.test(raw))return{type:'daily',dateKey:raw,monthKey:raw.slice(0,7)};
-  return{type:'monthly',dateKey:'',monthKey:raw.slice(0,7)||monthKey()};
-}
-function recordMatchesBonusPeriod(record,period=monthKey()){
-  const p=normalizeBonusPeriod(period), d=bonusRecordDateKey(record), m=bonusRecordMonthKey(record);
-  if(p.type==='daily')return d===p.dateKey;
-  return m===p.monthKey||(d&&d.startsWith(p.monthKey));
-}
 function manualBonusRowsForDate(dateKey=todayKey()){
-  const d=String(dateKey||todayKey()).slice(0,10), u=key(state.user?.username);
-  return sortDesc((state.data.manual||[]).filter(b=>!deleted(b)&&manualBonusDate(b)===d&&(!u||key(b.user)===u)&&Number(b.amount||0)!==0));
+  const d=String(dateKey||todayKey()).slice(0,10);
+  return sortDesc((state.data.manual||[]).filter(b=>!deleted(b)&&manualBonusDate(b)===d&&Number(b.amount||0)!==0));
 }
-function manualBonusRowsForMonth(month=monthKey()){
-  const m=String(month||monthKey()).slice(0,7), u=key(state.user?.username);
-  return sortDesc((state.data.manual||[]).filter(b=>!deleted(b)&&manualBonusMonth(b)===m&&(!u||key(b.user)===u)&&Number(b.amount||0)!==0));
-}
-function manualBonusForPeriod(period=monthKey()){
-  const p=normalizeBonusPeriod(period), rows=p.type==='daily'?manualBonusRowsForDate(p.dateKey):manualBonusRowsForMonth(p.monthKey);
-  return rows.reduce((sum,b)=>sum+Number(b.amount||0),0);
-}
-function manualBonusToday(){return manualBonusForPeriod({type:'daily',dateKey:todayKey()})}
-function manualBonus(){return manualBonusForPeriod(monthKey())}
-function activeClosings(period={type:'daily',dateKey:todayKey()}){return state.data.closings.filter(c=>c&&c.closed===true&&c.canceled!==true&&!deleted(c)&&recordMatchesBonusPeriod(c,period))}
+function manualBonusToday(){return manualBonusRowsForDate(todayKey()).reduce((sum,b)=>sum+Number(b.amount||0),0)}
+function manualBonus(){return manualBonusToday()}
+function activeClosings(){const d=todayKey();return state.data.closings.filter(c=>c&&c.closed===true&&c.canceled!==true&&!deleted(c)&&String(c.dateKey||'')===d)}
 function closingScope(c){return String(c?.scope||(c?.user?'user':'global')).toLowerCase()}
-function closingCanceledMap(c){const raw=c?.canceledUsers||c?.canceledByUser||{};if(Array.isArray(raw))return raw.reduce((acc,u)=>{const k=key(u);if(k)acc[k]=true;return acc},{});return raw&&typeof raw==='object'?raw:{}}
-function isClosingCanceledForUser(c,username=state.user?.username){const u=key(username||'');if(!c||!u)return false;const val=closingCanceledMap(c)[u];return val===true||val==='true'||!!(val&&typeof val==='object'&&val.canceled!==false)}
-function closingBonusValue(c,username=state.user?.username){
+function closingBonusValue(c){
   if(!c||c.closed!==true)return 0;
-  const u=key(username), map=c.bonusByUser||{}, scope=closingScope(c);
-  if(u){
-    if(isClosingCanceledForUser(c,u))return 0;
+  const u=key(state.user?.username), map=c.bonusByUser||{}, scope=closingScope(c);
+  if(scope==='user'||c.user){
     if(Object.keys(map).length)return Number(map[u]||0);
-    if(scope==='user'||c.user)return key(c.user)===u?Number(c.bonusPerUser||c.totalBonus||0):0;
-    return 0;
+    return key(c.user)===u?Number(c.bonusPerUser||c.totalBonus||0):0;
   }
-  if(Object.keys(map).length)return Object.keys(map).reduce((sum,k)=>sum+(isClosingCanceledForUser(c,k)?0:Number(map[k]||0)),0);
-  return Number(c.totalBonus||0);
+  // Penting: untuk closing GLOBAL, user hanya dapat bonus kalau index menulis bonusByUser[username].
+  // Jangan fallback ke bonusPerUser/totalBonus, karena user yang sudah closing per-user bisa terbaca dobel.
+  return Number(map[u]||0);
 }
-function closingBonusRows(period={type:'daily',dateKey:todayKey()}){
+function closingBonusRows(){
   if(isDaily())return [];
   const byDate=new Map();
-  activeClosings(period).forEach(c=>{
-    const d=bonusRecordDateKey(c);if(!d)return;
-    const val=Math.round(closingBonusValue(c));if(!val)return;
+  activeClosings().forEach(c=>{
+    const d=String(c.dateKey||'').slice(0,10);
+    if(!d)return;
+    const val=Math.round(closingBonusValue(c));
+    if(!val)return;
     const scope=closingScope(c), prev=byDate.get(d);
+    // Satu user hanya boleh punya 1 bonus closing per tanggal. Jika ada closing per-user dan global, prioritaskan per-user.
     if(!prev||scope==='user'||c.user)byDate.set(d,{record:c,val});
   });
   return [...byDate.values()];
 }
-function closingBonus(period={type:'daily',dateKey:todayKey()}){return closingBonusRows(period).reduce((sum,x)=>sum+Number(x.val||0),0)}
-function closingCount(){return closingBonusRows(monthKey()).length}
-function getTransactionBonusGroup(t=null){const g=key(t?.bonusGroup||t?.bonusType||'');if(g==='harian'||g==='daily'||g==='karyawan_harian')return'harian';if(g==='staff')return'staff';const r=key(t?.userRole||t?.role||'');if(r==='harian'||r==='daily'||r==='karyawan_harian')return'harian';if(r==='staff')return'staff';return isDaily()?'harian':'staff'}
-function isDailyTransactionRecord(t=null){return getTransactionBonusGroup(t)==='harian'}
-function transactionBonusForList(list){return Math.round((list||[]).reduce((sum,t)=>sum+Number(t?.amount||0)*txBonusRate(t),0))}
-function getBonusBreakdown(period=monthKey()){
-  const p=normalizeBonusPeriod(period), tx=liveTx().filter(t=>recordMatchesBonusPeriod(t,p));
-  const targetIsDaily=isDaily();
-  const staffTransactions=tx.filter(t=>!isDailyTransactionRecord(t));
-  const dailyTransactions=tx.filter(isDailyTransactionRecord);
-  const staffTransactionBonus=transactionBonusForList(staffTransactions);
-  const dailySalary=transactionBonusForList(dailyTransactions);
-  const closing=targetIsDaily?0:closingBonus(p);
-  const manual=manualBonusForPeriod(p);
-  const total=targetIsDaily?dailySalary+manual:staffTransactionBonus+closing+manual;
-  return{trxBonus:targetIsDaily?dailySalary:staffTransactionBonus,closingBonus:closing,manualBonus:manual,dailySalary,staffTransactionBonus,totalBonus:total};
-}
-function trxBonus(period=monthKey()){return getBonusBreakdown(period).trxBonus}
-function bonusHariIni(){return getBonusBreakdown({type:'daily',dateKey:todayKey()}).totalBonus}
-function totalBonus(){return getBonusBreakdown(monthKey()).totalBonus}
+function closingBonus(){return closingBonusRows().reduce((sum,x)=>sum+Number(x.val||0),0)}
+function closingCount(){return closingBonusRows().length}
+function trxBonus(){return txBonusSum(todayTx())}
+function totalBonus(){return trxBonus()+closingBonus()+manualBonus()}
 function todayClosing(){
   const d=todayKey(), u=key(state.user?.username);
   const rows=state.data.closings.filter(c=>c&&c.closed===true&&c.canceled!==true&&!deleted(c)&&String(c.dateKey||'')===d);
@@ -1089,7 +1045,7 @@ function home(){const tx=todayTx(), a=todayAtt(), c=todayClosing();
     page.innerHTML=`${top('Mode Harian',state.user?.name||'Karyawan Harian')}${manualBonusNoticeCard()}<div class="hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div><div class="grid2" style="margin-top:8px"><div class="stat"><div class="stat-label">Transaksi Hari Ini</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Gaji Hari Ini</div><div class="stat-val">Rp ${rp(todayBonus)}</div><div class="stat-foot">hari ini</div></div></div>${manualCard}${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`;
     return;
   }
-  const mainLabel=c?'Closing Hari Ini':'Absen Hari Ini';const mainValue=c?closingTimeText(c):(a?timeID(ms(a)):'--:--');const mainFoot=c?'sudah closing':(a?'sudah absen':'belum absen');const mainClass=c?'closed':(a?'ok':'wait');const bonusHariIniCard=c?`<div class="stat"><div class="stat-label">Bonus Hari Ini</div><div class="stat-val">Rp ${rp(bonusHariIni())}</div><div class="stat-foot">hari ini</div></div>`:`<div class="stat"><div class="stat-label">Bonus Hari Ini</div><div class="stat-val" style="font-size:17px;letter-spacing:-.02em">Belum Closing</div><div class="stat-foot">bonus terlihat saat closing</div></div>`;page.innerHTML=`${top('Mode Staff',state.user?.name||'Karyawan Staff')}${manualBonusNoticeCard()}${averageAttendanceCard()}${closingNotice()}<div class="hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div><div class="grid2" style="margin-top:8px"><div class="stat att-status ${mainClass}"><div class="stat-label">${mainLabel}</div><div class="stat-val">${mainValue}</div><div class="stat-foot">${mainFoot}</div></div>${bonusHariIniCard}<div class="stat"><div class="stat-label">Transaksi</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Total Masuk Kerja</div><div class="stat-val">${monthAttendDays()} <span style="font-size:13px;font-weight:850;color:var(--muted);letter-spacing:0">Hari</span></div><div class="stat-foot">${monthID(monthKey())}</div></div></div><div class="card bonus-plus-card" style="margin-top:8px"><div class="bonus-plus-head"><div class="label">Bonus ++</div><button class="refresh-icon-btn" onclick="refresh()" aria-label="Refresh bonus"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg></button></div><div class="big" style="color:var(--blue)">Rp ${rp(totalBonus())}</div><div class="bonus-note">Bonus ini sudah termasuk total bonus keseluruhan</div>${todayClosingBonusInline()}</div>${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`}
+  const mainLabel=c?'Closing Hari Ini':'Absen Hari Ini';const mainValue=c?closingTimeText(c):(a?timeID(ms(a)):'--:--');const mainFoot=c?'sudah closing':(a?'sudah absen':'belum absen');const mainClass=c?'closed':(a?'ok':'wait');page.innerHTML=`${top('Mode Staff',state.user?.name||'Karyawan Staff')}${manualBonusNoticeCard()}${averageAttendanceCard()}${closingNotice()}<div class="hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div><div class="grid2" style="margin-top:8px"><div class="stat att-status ${mainClass}"><div class="stat-label">${mainLabel}</div><div class="stat-val">${mainValue}</div><div class="stat-foot">${mainFoot}</div></div><div class="stat att-status ${isClosedToday()||(!isDaily()&&!a)?'wait':'ok'}"><div class="stat-label">Status Transaksi</div><div class="stat-val">${isClosedToday()||(!isDaily()&&!a)?'Terkunci':'Terbuka'}</div><div class="stat-foot">${isClosedToday()?'sudah closing':(a?'siap transaksi':'belum absen')}</div></div><div class="stat"><div class="stat-label">Transaksi</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Total Masuk Kerja</div><div class="stat-val">${monthAttendDays()} <span style="font-size:13px;font-weight:850;color:var(--muted);letter-spacing:0">Hari</span></div><div class="stat-foot">${monthID(monthKey())}</div></div></div><div class="card bonus-plus-card" style="margin-top:8px"><div class="bonus-plus-head"><div class="label">Bonus ++</div><button class="refresh-icon-btn" onclick="refresh()" aria-label="Refresh bonus"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg></button></div><div class="big" style="color:var(--blue)">Rp ${rp(totalBonus())}</div><div class="bonus-note">Bonus ini sudah termasuk total bonus keseluruhan</div>${todayClosingBonusInline()}</div>${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`}
 function history(){const items=sortDesc(todayTx());const printAllCard=items.length?`<div class="card" style="margin-bottom:8px"><button class="btn primary block" onclick="printTodayTransactions()">🧾 Cetak Semua Transaksi Hari Ini</button><div class="hint" style="margin-top:6px">Cetak ${items.length} transaksi hari ini dalam 1 struk.</div></div>`:'';const body=items.length?`<div class="tx-table"><div class="tx-head"><span>History Transaksi</span><span></span><span></span></div><div class="tx-list">${items.map(txItem).join('')}</div></div>`:'<div class="empty">Belum ada transaksi hari ini.</div>';page.innerHTML=`${top('Riwayat Hari Ini',`${items.length} transaksi · Rp ${rp(todayTotal())}`)}${syncBar()}${printAllCard}${body}`}
 async function pinAsk(msg='Masukkan PIN'){return new Promise(res=>{window.__pin=v=>{closeModal();delete window.__pin;res(String(v||''))};modal('Verifikasi PIN',`<div class="hint" style="margin-bottom:8px">${esc(msg)}</div><input id="pinx" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" placeholder="PIN" style="text-align:center;font-size:22px;font-weight:950">`,`<button class="btn" onclick="__pin('')">Batal</button><button class="btn primary" onclick="__pin(document.getElementById('pinx').value)">Lanjut</button>`);setTimeout(()=>$('pinx')?.focus(),60)})}
 function openTx(){if(!state.user)return;if(!canTx())return toast(isClosedToday()?'Transaksi sudah closing hari ini':'Absen dulu sebelum transaksi');primeSuccessSound();modal('Transaksi Baru',`<div class="tx-chip"><span>⚡ Input cepat</span><b>${timeNow()} WIB</b></div><div class="field"><div class="label">Nama Produk</div><textarea id="txn" class="tx-product-input" placeholder="Produk...&#10;&#10;&#10;" autocomplete="off" rows="4"></textarea></div><div class="field"><div class="label">Nominal Rupiah</div><input id="txa" class="tx-amount-input" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="Rp 0" oninput="formatRupiahInput(this)" style="text-align:right;font-size:25px;font-weight:950"></div><div class="tx-note-mini">Pilih <b>Simpan</b> untuk catat transaksi saja. Pilih <b>Cetak</b> kalau mau simpan sekaligus langsung cetak ke printer.</div>`,`<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;width:100%"><button class="btn danger" onclick="closeModal()" style="grid-column:1 / -1">Batal</button><button class="btn success" onclick="saveTx(true)" style="background:var(--green);border-color:var(--green);color:#fff">Cetak</button><button class="btn primary" onclick="saveTx(false)">Simpan</button></div>`,'tx-modal')}
