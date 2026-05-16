@@ -3316,6 +3316,8 @@ async function saveTx(printAfterSave=false,paymentMethod='',draft=null){
     paymentMethod:payment,
     paymentLabel:paymentText,
     paymentStatus:'success',
+    paymentCashOutType:payment==='qris_transfer'?'qris':'',
+    isNonCashPayment:payment==='qris_transfer',
     paymentConfirmed:true,
     paymentConfirmedAtMs:now,
     dateKey:todayKey(),
