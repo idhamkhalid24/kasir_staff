@@ -1,0 +1,17 @@
+{
+  "base_functions": 226,
+  "new_functions": 227,
+  "missing_functions": [],
+  "added_functions": [
+    "closeEmptyStockReport"
+  ],
+  "checks": {
+    "openEmptyStockReport": true,
+    "closeEmptyStockReport": true,
+    "report_close_button": true,
+    "multi_color_rows": true,
+    "auto_prune": true,
+    "card_menonjol_css": true,
+    "index_links_css_js": true
+  }
+}
