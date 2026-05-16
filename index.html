@@ -3026,20 +3026,66 @@ function belanjaSlug(v){return cleanBelanjaText(v).toLowerCase().replace(/\s+/g,
 function getBelanjakuBridgeQueue(){try{const raw=JSON.parse(localStorage.getItem(BELANJAKU_BRIDGE_KEY)||'[]');return Array.isArray(raw)?raw.filter(Boolean):[]}catch(e){return []}}
 function setBelanjakuBridgeQueue(list){try{localStorage.setItem(BELANJAKU_BRIDGE_KEY,JSON.stringify((list||[]).slice(-250)))}catch(e){}}
 function saveBelanjakuBridgeQueue(item){const list=getBelanjakuBridgeQueue().filter(x=>String(x.id)!==String(item.id));list.push(item);setBelanjakuBridgeQueue(list)}
-function stockEmptyQuickCard(){return `<div class="card" style="margin-top:8px;border-color:var(--amber-mid);background:linear-gradient(135deg,var(--amber-light),var(--card))"><div class="between" style="align-items:center"><div style="min-width:0"><div class="label">Barang Kosong</div><div class="hint" style="margin-top:3px">Kirim nama barang dan warna ke Owner.</div></div><button class="btn warn" type="button" onclick="openEmptyStock()">Laporkan</button></div></div>`}
-function buildBelanjakuEmptyItem({name,color,qty,supplier,note}){
+function stockEmptyQuickCard(){return `<div class="card" style="margin-top:8px;border-color:var(--amber-mid);background:linear-gradient(135deg,var(--amber-light),var(--card))"><div class="between" style="align-items:center"><div style="min-width:0"><div class="label">Barang Kosong</div><div class="hint" style="margin-top:3px">Kirim 1 barang dengan banyak warna ke Owner.</div></div><button class="btn warn" type="button" onclick="openEmptyStock()">Laporkan</button></div></div>`}
+function normalizeEmptyStockVariants(list){
+  const merged=[], seen=new Map();
+  (Array.isArray(list)?list:[]).forEach(row=>{
+    const colorName=cleanBelanjaText(row?.colorName||row?.color||'');
+    if(!colorName)return;
+    const qty=Math.max(1,Number(row?.qty)||1);
+    const k=colorName.toLowerCase();
+    if(seen.has(k))seen.get(k).qty+=qty;
+    else{const item={colorName,qty,done:false};seen.set(k,item);merged.push(item)}
+  });
+  return merged;
+}
+function addEmptyStockVariantRow(colorName='',qty=1){
+  const list=$('emptyStockVariantList');
+  if(!list)return;
+  const row=document.createElement('div');
+  row.className='empty-stock-variant-row';
+  row.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) 78px 36px;gap:7px;align-items:end;margin-bottom:8px';
+  row.innerHTML=`<div><div class="label" style="font-size:10px;margin-bottom:4px">Warna / Motif</div><input class="empty-stock-color" autocomplete="off" placeholder="Contoh: Milo"></div><div><div class="label" style="font-size:10px;margin-bottom:4px">Qty</div><input class="empty-stock-qty" type="tel" inputmode="numeric" pattern="[0-9]*" value="1"></div><button type="button" class="btn danger" style="min-height:42px;padding:0;border-radius:10px" onclick="removeEmptyStockVariantRow(this)">×</button>`;
+  const color=row.querySelector('.empty-stock-color'), qtyInput=row.querySelector('.empty-stock-qty');
+  if(color)color.value=cleanBelanjaText(colorName);
+  if(qtyInput)qtyInput.value=Math.max(1,Number(qty)||1);
+  list.appendChild(row);
+  setTimeout(()=>color?.focus({preventScroll:true}),40);
+  return row;
+}
+function removeEmptyStockVariantRow(btn){
+  const list=$('emptyStockVariantList'), row=btn?.closest?.('.empty-stock-variant-row');
+  if(!list||!row)return;
+  const rows=[...list.querySelectorAll('.empty-stock-variant-row')];
+  if(rows.length<=1){
+    const color=row.querySelector('.empty-stock-color'), qty=row.querySelector('.empty-stock-qty');
+    if(color)color.value='';
+    if(qty)qty.value='1';
+    color?.focus();
+  }else row.remove();
+}
+function getEmptyStockVariants(){
+  return normalizeEmptyStockVariants([...document.querySelectorAll('.empty-stock-variant-row')].map(row=>({
+    colorName:row.querySelector('.empty-stock-color')?.value,
+    qty:Number(onlyDigits(row.querySelector('.empty-stock-qty')?.value))||1
+  })));
+}
+function buildBelanjakuEmptyItem({name,variants,supplier,note}){
   const now=Date.now(), nowISO=new Date(now).toISOString(), u=key(state.user?.username||'staff'), displayName=state.user?.name||state.user?.username||'Staff';
-  const cleanName=cleanBelanjaText(name), cleanColor=cleanBelanjaText(color), cleanSupplier=cleanBelanjaText(supplier), cleanNote=cleanBelanjaText(note);
+  const cleanName=cleanBelanjaText(name), cleanSupplier=cleanBelanjaText(supplier), cleanNote=cleanBelanjaText(note);
+  const cleanVariants=normalizeEmptyStockVariants(variants);
   const id='stafku_empty_'+belanjaSlug(u)+'_'+now+'_'+Math.random().toString(36).slice(2,7);
+  const variantText=cleanVariants.map(v=>`${v.colorName} (${v.qty} pcs)`).join(', ');
+  const baseNote=cleanNote?`Dari Stafku (${displayName}): ${cleanNote}`:`Dari Stafku (${displayName}) - barang kosong`;
   return {
     id,
     name:cleanName,
     supplierName:cleanSupplier,
     kodiPrice:0,
-    variants:[{colorName:cleanColor,qty:Math.max(1,Number(qty)||1),done:false}],
+    variants:cleanVariants,
     unit:'pcs',
     priority:'Tinggi',
-    note:cleanNote?`Dari Stafku (${displayName}): ${cleanNote}`:`Dari Stafku (${displayName}) - barang kosong`,
+    note:variantText?`${baseNote}. Warna: ${variantText}`:baseNote,
     done:false,
     source:'stafku_barang_kosong',
     staffStatus:'inbox',
@@ -3074,20 +3120,19 @@ async function syncBelanjakuBridgeQueue(){
 }
 function openEmptyStock(){
   if(!state.user)return toast('Silakan login ulang');
-  modal('Barang Kosong',`<div class="tx-chip"><span>🛒 Kirim ke Daftar Belanja</span><b>${timeNow()} WIB</b></div><div class="field"><div class="label">Nama Barang</div><input id="emptyStockName" autocomplete="off" placeholder="Contoh: Pasmina Ceruty"></div><div class="field"><div class="label">Warna / Motif</div><input id="emptyStockColor" autocomplete="off" placeholder="Contoh: Milo"></div><div class="grid2"><div class="field"><div class="label">Qty</div><input id="emptyStockQty" type="tel" inputmode="numeric" pattern="[0-9]*" value="1"></div><div class="field"><div class="label">Supplier (opsional)</div><input id="emptyStockSupplier" autocomplete="off" placeholder=""></div></div><div class="field"><div class="label">Catatan (opsional)</div><input id="emptyStockNote" autocomplete="off" placeholder="Contoh: sering ditanya customer"></div><div class="tx-note-mini">Setelah dikirim, barang masuk halaman <b>Kiriman Staff</b> di Belanjaku. Owner bisa tekan <b>Tambahkan ke Keranjang</b>.</div>`,`<button type="button" class="btn danger" onclick="closeModal(true)">Batal</button><button type="button" class="btn warn" onclick="submitEmptyStock()">Kirim</button>`,'tx-modal');
+  modal('Barang Kosong',`<div class="tx-chip"><span>🛒 Kirim ke Daftar Belanja</span><b>${timeNow()} WIB</b></div><div class="field"><div class="label">Nama Barang</div><input id="emptyStockName" autocomplete="off" placeholder="Contoh: Pasmina Ceruty"></div><div class="field"><div class="between" style="margin-bottom:7px;align-items:center"><div class="label" style="margin:0">Warna / Motif</div><button type="button" class="btn warn sm" onclick="addEmptyStockVariantRow()">+ Warna</button></div><div id="emptyStockVariantList"><div class="empty-stock-variant-row" style="display:grid;grid-template-columns:minmax(0,1fr) 78px 36px;gap:7px;align-items:end;margin-bottom:8px"><div><div class="label" style="font-size:10px;margin-bottom:4px">Warna / Motif</div><input class="empty-stock-color" autocomplete="off" placeholder="Contoh: Milo"></div><div><div class="label" style="font-size:10px;margin-bottom:4px">Qty</div><input class="empty-stock-qty" type="tel" inputmode="numeric" pattern="[0-9]*" value="1"></div><button type="button" class="btn danger" style="min-height:42px;padding:0;border-radius:10px" onclick="removeEmptyStockVariantRow(this)">×</button></div></div><div class="hint" style="display:block;margin-top:2px">Bisa tambah banyak warna untuk satu barang.</div></div><div class="field"><div class="label">Supplier (opsional)</div><input id="emptyStockSupplier" autocomplete="off" placeholder=""></div><div class="field"><div class="label">Catatan (opsional)</div><input id="emptyStockNote" autocomplete="off" placeholder="Contoh: sering ditanya customer"></div><div class="tx-note-mini">Setelah dikirim, barang masuk halaman <b>Kiriman Staff</b> di Belanjaku sebagai <b>1 barang multi warna</b>. Owner bisa tekan <b>Tambahkan ke Keranjang</b>.</div>`,`<button type="button" class="btn danger" onclick="closeModal(true)">Batal</button><button type="button" class="btn warn" onclick="submitEmptyStock()">Kirim</button>`,'tx-modal');
   setTimeout(()=>$('emptyStockName')?.focus(),80);
 }
 async function submitEmptyStock(){
-  const name=cleanBelanjaText($('emptyStockName')?.value), color=cleanBelanjaText($('emptyStockColor')?.value);
+  const name=cleanBelanjaText($('emptyStockName')?.value), variants=getEmptyStockVariants();
   if(!name)return toast('Nama barang wajib diisi');
-  if(!color)return toast('Warna wajib diisi');
-  const qty=Math.max(1,Number(onlyDigits($('emptyStockQty')?.value))||1);
-  const item=buildBelanjakuEmptyItem({name,color,qty,supplier:$('emptyStockSupplier')?.value,note:$('emptyStockNote')?.value});
+  if(!variants.length)return toast('Minimal isi 1 warna');
+  const item=buildBelanjakuEmptyItem({name,variants,supplier:$('emptyStockSupplier')?.value,note:$('emptyStockNote')?.value});
   saveBelanjakuBridgeQueue(item);
   closeModal(true);
-  toast('Barang kosong disiapkan untuk Belanjaku');
+  toast(`${variants.length} warna disiapkan untuk Belanjaku`);
   const result=await syncBelanjakuBridgeQueue();
-  if(result.sent>0)toast('Barang kosong masuk ke halaman Staff Belanjaku');
+  if(result.sent>0)toast('Barang kosong multi warna masuk ke Belanjaku');
   else toast('Tersimpan lokal, buka Belanjaku lalu refresh');
 }
 
@@ -3575,7 +3620,7 @@ try{
   window.addEventListener('online',()=>{syncBelanjakuBridgeQueue().then(r=>{if(r.sent)toast('Data Belanjaku terkirim')}).catch(()=>{})});
   window.addEventListener('focus',()=>{syncBelanjakuBridgeQueue().catch(()=>{})});
 }catch(e){}
-window.openStaffNoteLink=openStaffNoteLink;window.login=login;window.logout=logout;window.toggleTheme=toggleTheme;window.openHeaderGuideDetail=openHeaderGuideDetail;window.refresh=refresh;window.hardRefreshApp=hardRefreshApp;window.retrySync=retrySync;window.go=go;window.appBack=appBack;window.openTx=openTx;window.openEmptyStock=openEmptyStock;window.submitEmptyStock=submitEmptyStock;window.syncBelanjakuBridgeQueue=syncBelanjakuBridgeQueue;window.saveTx=saveTx;window.delTx=delTx;window.closeModal=closeModal;window.closeFirstTxParty=closeFirstTxParty;window.closeManualBonusParty=closeManualBonusParty;window.updateLocation=updateLocation;window.clockIn=clockIn;window.formatRupiahInput=formatRupiahInput;window.printReceiptFromTx=printReceiptFromTx;window.printTodayTransactions=printTodayTransactions;window.copyReceiptText=copyReceiptText;window.shareReceiptText=shareReceiptText;window.nativePrintReceiptText=nativePrintReceiptText;window.directPrintReceiptText=directPrintReceiptText;window.browserPrintReceiptText=browserPrintReceiptText;
+window.openStaffNoteLink=openStaffNoteLink;window.login=login;window.logout=logout;window.toggleTheme=toggleTheme;window.openHeaderGuideDetail=openHeaderGuideDetail;window.refresh=refresh;window.hardRefreshApp=hardRefreshApp;window.retrySync=retrySync;window.go=go;window.appBack=appBack;window.openTx=openTx;window.openEmptyStock=openEmptyStock;window.addEmptyStockVariantRow=addEmptyStockVariantRow;window.removeEmptyStockVariantRow=removeEmptyStockVariantRow;window.submitEmptyStock=submitEmptyStock;window.syncBelanjakuBridgeQueue=syncBelanjakuBridgeQueue;window.saveTx=saveTx;window.delTx=delTx;window.closeModal=closeModal;window.closeFirstTxParty=closeFirstTxParty;window.closeManualBonusParty=closeManualBonusParty;window.updateLocation=updateLocation;window.clockIn=clockIn;window.formatRupiahInput=formatRupiahInput;window.printReceiptFromTx=printReceiptFromTx;window.printTodayTransactions=printTodayTransactions;window.copyReceiptText=copyReceiptText;window.shareReceiptText=shareReceiptText;window.nativePrintReceiptText=nativePrintReceiptText;window.directPrintReceiptText=directPrintReceiptText;window.browserPrintReceiptText=browserPrintReceiptText;
 setupAutoSync();
 // Pull-to-refresh dimatikan supaya tidak ada read tambahan tanpa sengaja.
 // Refresh manual dan realtime tetap aktif.
