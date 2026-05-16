@@ -1,0 +1,41 @@
+{
+  "task": "Update warna khusus card Barang Kosong agar berbeda dari card lain",
+  "summary": "Perubahan hanya pada template tampilan stockEmptyQuickCard() dan tambahan CSS .stock-empty-card. Handler onclick openEmptyStock() tetap sama.",
+  "changes": [
+    {
+      "file": "index.html",
+      "changed": false,
+      "original_chars": 1768,
+      "new_chars": 1768
+    },
+    {
+      "file": "style.css",
+      "changed": true,
+      "original_chars": 96813,
+      "new_chars": 99296
+    },
+    {
+      "file": "script.js",
+      "changed": true,
+      "original_chars": 212192,
+      "new_chars": 212102
+    }
+  ],
+  "checks": {
+    "stockEmptyQuickCard_function_count": 1,
+    "openEmptyStock_onclick_still_present": true,
+    "new_stock_empty_class_used": true,
+    "old_inline_amber_card_removed": true,
+    "new_css_block_present": true,
+    "index_unchanged": true
+  },
+  "changed_files": [
+    "script.js",
+    "style.css"
+  ],
+  "logic_preservation_notes": [
+    "Tidak mengubah import Firebase, config, state, fungsi submit/open modal, storage, sync, atau perhitungan.",
+    "Tombol Laporkan tetap memanggil openEmptyStock().",
+    "index.html tetap memanggil style.css dan script.js seperti sebelumnya."
+  ]
+}
