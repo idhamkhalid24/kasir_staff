@@ -2037,6 +2037,193 @@
       .stock-empty-icon{width:28px!important;height:28px!important;min-width:28px!important;border-radius:10px!important;font-size:15px!important}
     }
 
+    /* ===== JADWAL SHALAT CARD - ISLAMI / COMPACT ===== */
+    .prayer-stat-card{
+      position:relative;
+      border-color:rgba(16,185,129,.38)!important;
+      background:
+        radial-gradient(circle at top right,rgba(245,158,11,.24),transparent 42%),
+        linear-gradient(135deg,rgba(16,185,129,.16),var(--card) 100%)!important;
+      overflow:hidden;
+    }
+    .prayer-stat-card::after{
+      content:"☪";
+      position:absolute;
+      right:10px;
+      top:8px;
+      font-size:18px;
+      line-height:1;
+      color:#d97706;
+      opacity:.24;
+      pointer-events:none;
+    }
+    .prayer-stat-card .stat-label{
+      color:#047857!important;
+      padding-right:22px;
+    }
+    .prayer-stat-card .stat-val{
+      color:#0f766e!important;
+      font-size:22px!important;
+      line-height:1.12;
+      white-space:nowrap;
+    }
+    .prayer-stat-card .stat-foot{
+      color:var(--text2)!important;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .prayer-daily-card{
+      margin-top:8px!important;
+      min-height:64px!important;
+      display:grid!important;
+      grid-template-columns:minmax(0,1fr) auto;
+      grid-template-rows:auto auto;
+      column-gap:10px;
+      align-items:center;
+    }
+    .prayer-daily-card .stat-label{grid-column:1;grid-row:1;padding-right:0!important}
+    .prayer-daily-card .stat-foot{grid-column:1;grid-row:2;margin-top:2px!important}
+    .prayer-daily-card .stat-val{grid-column:2;grid-row:1 / span 2;margin-top:0!important;text-align:right;font-size:21px!important}
+    .prayer-daily-card::after{right:52px;top:50%;transform:translateY(-50%);font-size:20px}
+    [data-theme="dark"] .prayer-stat-card{
+      background:
+        radial-gradient(circle at top right,rgba(245,158,11,.18),transparent 42%),
+        linear-gradient(135deg,rgba(52,211,153,.13),var(--card) 100%)!important;
+      border-color:rgba(52,211,153,.32)!important;
+    }
+    [data-theme="dark"] .prayer-stat-card .stat-label{color:#34d399!important}
+    [data-theme="dark"] .prayer-stat-card .stat-val{color:#6ee7b7!important}
+    [data-theme="dark"] .prayer-stat-card::after{color:#fbbf24;opacity:.20}
+    @media(max-width:360px){
+      .prayer-stat-card .stat-val{font-size:16px!important}
+      .prayer-daily-card{min-height:58px!important;column-gap:8px!important}
+      .prayer-daily-card .stat-val{font-size:17px!important}
+      .prayer-daily-card::after{right:44px;font-size:18px!important}
+    }
+
+    /* ===== MODE HARIAN: JADWAL SHALAT BANNER RAPIH ===== */
+    .prayer-daily-banner{
+      margin-top:8px!important;
+      padding:10px 12px!important;
+      min-height:58px!important;
+      display:flex!important;
+      align-items:center!important;
+      gap:10px!important;
+      border-color:rgba(16,185,129,.42)!important;
+      background:
+        linear-gradient(135deg,rgba(16,185,129,.16),rgba(245,158,11,.10) 55%,var(--card) 100%)!important;
+      box-shadow:var(--shadow)!important;
+      overflow:hidden!important;
+    }
+    .prayer-daily-icon{
+      width:34px!important;
+      height:34px!important;
+      min-width:34px!important;
+      border-radius:13px!important;
+      display:inline-flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      background:rgba(16,185,129,.14)!important;
+      border:1.5px solid rgba(16,185,129,.28)!important;
+      color:#047857!important;
+      font-size:15px!important;
+      line-height:1!important;
+      font-weight:900!important;
+    }
+    .prayer-daily-main{min-width:0!important;flex:1!important}
+    .prayer-daily-label{
+      font-size:9px!important;
+      text-transform:uppercase!important;
+      letter-spacing:.07em!important;
+      font-weight:900!important;
+      color:#047857!important;
+      line-height:1.15!important;
+    }
+    .prayer-daily-foot{
+      margin-top:4px!important;
+      font-size:10.5px!important;
+      color:var(--text2)!important;
+      font-weight:750!important;
+      line-height:1.25!important;
+      white-space:nowrap!important;
+      overflow:hidden!important;
+      text-overflow:ellipsis!important;
+    }
+    .prayer-daily-time{
+      min-width:62px!important;
+      text-align:right!important;
+      font-size:21px!important;
+      line-height:1!important;
+      font-weight:950!important;
+      letter-spacing:-.04em!important;
+      color:#0f766e!important;
+      font-variant-numeric:tabular-nums!important;
+      white-space:nowrap!important;
+    }
+    [data-theme="dark"] .prayer-daily-banner{
+      background:linear-gradient(135deg,rgba(52,211,153,.13),rgba(251,191,36,.08) 55%,var(--card) 100%)!important;
+      border-color:rgba(52,211,153,.35)!important;
+    }
+    [data-theme="dark"] .prayer-daily-icon{
+      background:rgba(52,211,153,.13)!important;
+      border-color:rgba(52,211,153,.28)!important;
+      color:#6ee7b7!important;
+    }
+    [data-theme="dark"] .prayer-daily-label{color:#34d399!important}
+    [data-theme="dark"] .prayer-daily-time{color:#6ee7b7!important}
+    @media(max-width:360px){
+      .prayer-daily-banner{min-height:52px!important;padding:9px 10px!important;gap:8px!important}
+      .prayer-daily-icon{width:30px!important;height:30px!important;min-width:30px!important;border-radius:11px!important;font-size:13px!important}
+      .prayer-daily-label{font-size:8px!important}
+      .prayer-daily-foot{font-size:9px!important;margin-top:3px!important}
+      .prayer-daily-time{font-size:18px!important;min-width:54px!important}
+    }
+
+
+    /* ===== STAFF HOME: SAMAKAN UKURAN CARD GRID ===== */
+    .staff-stat-grid > .stat{
+      min-height:67px!important;
+      padding:11px 10px!important;
+      display:flex!important;
+      flex-direction:column!important;
+      justify-content:center!important;
+    }
+    .staff-stat-grid .stat-label{
+      min-height:10px!important;
+      line-height:1.15!important;
+    }
+    .staff-stat-grid .stat-val{
+      font-size:18px!important;
+      margin-top:5px!important;
+      line-height:1.12!important;
+    }
+    .staff-stat-grid .stat-foot{
+      min-height:12px!important;
+      margin-top:4px!important;
+      line-height:1.25!important;
+    }
+    .staff-stat-grid .prayer-stat-card .stat-val{
+      font-size:18px!important;
+    }
+    .staff-stat-grid .prayer-stat-card::after{
+      top:8px!important;
+      right:10px!important;
+      font-size:16px!important;
+    }
+    @media(max-width:360px){
+      .staff-stat-grid > .stat{
+        min-height:62px!important;
+        padding:10px 9px!important;
+      }
+      .staff-stat-grid .stat-val,
+      .staff-stat-grid .prayer-stat-card .stat-val{
+        font-size:16px!important;
+      }
+      .staff-stat-grid .prayer-stat-card::after{
+        font-size:14px!important;
+      }
+    }
 
   </style>
 </head>
@@ -3072,14 +3259,82 @@ function browserPrintReceiptText(){
   }
   toast('Print/PDF tersedia di APK Android Studio. Untuk browser pakai Salin/Bagikan.');
 }
+
+
+/* ===== JADWAL SHALAT RINGAN - OFFLINE / TANPA API =====
+   Koordinat jadwal mengikuti koordinat absen: OFFICE_LOC. */
+const PRAYER_COORD={lat:OFFICE_LOC.lat,lng:OFFICE_LOC.lng,tz:7};
+const PRAYER_CFG={fajrAngle:20,ishaAngle:18,asrFactor:1,dhuhrOffset:2,maghribOffset:2};
+function prayerDayOfYear(d){
+  const start=new Date(d.getFullYear(),0,0);
+  return Math.floor((d-start)/86400000);
+}
+function prayerDeg(x){return x*Math.PI/180}
+function prayerRad(x){return x*180/Math.PI}
+function prayerPad(n){return String(Math.floor(Math.abs(n))).padStart(2,'0')}
+function prayerFmtMin(min){
+  min=((Math.round(min)%1440)+1440)%1440;
+  const h=Math.floor(min/60),m=min%60;
+  return `${prayerPad(h)}:${prayerPad(m)}`;
+}
+function prayerSolarData(date){
+  const n=prayerDayOfYear(date);
+  const g=2*Math.PI/365*(n-1);
+  const eq=229.18*(0.000075+0.001868*Math.cos(g)-0.032077*Math.sin(g)-0.014615*Math.cos(2*g)-0.040849*Math.sin(2*g));
+  const dec=0.006918-0.399912*Math.cos(g)+0.070257*Math.sin(g)-0.006758*Math.cos(2*g)+0.000907*Math.sin(2*g)-0.002697*Math.cos(3*g)+0.00148*Math.sin(3*g);
+  const noon=720-4*PRAYER_COORD.lng-eq+PRAYER_COORD.tz*60;
+  return {dec,noon};
+}
+function prayerHourAngle(latRad,dec,altDeg){
+  const alt=prayerDeg(altDeg);
+  const cosH=(Math.sin(alt)-Math.sin(latRad)*Math.sin(dec))/(Math.cos(latRad)*Math.cos(dec));
+  return prayerRad(Math.acos(Math.max(-1,Math.min(1,cosH))));
+}
+function prayerTimesForDate(date=new Date()){
+  const {dec,noon}=prayerSolarData(date),lat=prayerDeg(PRAYER_COORD.lat);
+  const sunAngle=(angle,afterNoon)=>{const h=prayerHourAngle(lat,dec,-Math.abs(angle));return noon+(afterNoon?h*4:-h*4)};
+  const sunrise=sunAngle(0.833,false), sunset=sunAngle(0.833,true);
+  const diff=Math.abs(lat-dec);
+  const asrAlt=prayerRad(Math.atan(1/(PRAYER_CFG.asrFactor+Math.tan(diff))));
+  const asr=noon+prayerHourAngle(lat,dec,asrAlt)*4;
+  return [
+    {key:'subuh',name:'Subuh',min:sunAngle(PRAYER_CFG.fajrAngle,false)},
+    {key:'dzuhur',name:'Dzuhur',min:noon+PRAYER_CFG.dhuhrOffset},
+    {key:'ashar',name:'Ashar',min:asr},
+    {key:'maghrib',name:'Maghrib',min:sunset+PRAYER_CFG.maghribOffset},
+    {key:'isya',name:'Isya',min:sunAngle(PRAYER_CFG.ishaAngle,true)}
+  ].map(x=>({...x,time:prayerFmtMin(x.min)}));
+}
+function nextPrayerInfo(){
+  const now=new Date();
+  const cur=now.getHours()*60+now.getMinutes();
+  const today=prayerTimesForDate(now);
+  let next=today.find(p=>Math.round(p.min)>cur);
+  let label='hari ini';
+  if(!next){
+    const tomorrow=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+    next=prayerTimesForDate(tomorrow)[0];
+    label='besok';
+  }
+  return {next,label,today};
+}
+function prayerStatCard(extraClass=''){
+  const info=nextPrayerInfo(), p=info.next;
+  if(extraClass==='daily'){
+    return `<div class="card prayer-daily-banner"><div class="prayer-daily-icon">☪</div><div class="prayer-daily-main"><div class="prayer-daily-label">Jadwal Shalat</div><div class="prayer-daily-foot">${p.name} ${info.label}</div></div><div class="prayer-daily-time">${p.time}</div></div>`;
+  }
+  const cls=extraClass?` prayer-${extraClass}-card`:'';
+  return `<div class="stat prayer-stat-card${cls}"><div class="stat-label">Jadwal Shalat</div><div class="stat-val">${p.time}</div><div class="stat-foot">${p.name} ${info.label}</div></div>`;
+}
+
 function home(){const tx=todayTx(), a=todayAtt(), c=todayClosing(), emptyStockCard=stockEmptyQuickCard();
   if(isDaily()){
     const todayTxBonus=txBonusSum(tx), manualToday=manualBonusToday(), todayBonus=todayTxBonus+manualToday;
     const manualCard='';
-    page.innerHTML=`${top('Mode Harian',state.user?.name||'Karyawan Harian')}${manualBonusNoticeCard()}<div class="hero daily-income-hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div>${emptyStockCard}<div class="grid2" style="margin-top:8px"><div class="stat"><div class="stat-label">Transaksi Hari Ini</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Gaji Hari Ini</div><div class="stat-val">Rp ${rp(todayBonus)}</div><div class="stat-foot">hari ini</div></div></div>${manualCard}${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`;
+    page.innerHTML=`${top('Mode Harian',state.user?.name||'Karyawan Harian')}${manualBonusNoticeCard()}<div class="hero daily-income-hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div>${emptyStockCard}<div class="grid2" style="margin-top:8px"><div class="stat"><div class="stat-label">Transaksi Hari Ini</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Gaji Hari Ini</div><div class="stat-val">Rp ${rp(todayBonus)}</div><div class="stat-foot">hari ini</div></div></div>${prayerStatCard('daily')}${manualCard}${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`;
     return;
   }
-  const mainLabel=c?'Closing Hari Ini':'Absen Hari Ini';const mainValue=c?closingTimeText(c):(a?timeID(ms(a)):'--:--');const mainFoot=c?'sudah closing':(a?'sudah absen':'belum absen');const mainClass=c?'closed':(a?'ok':'wait');page.innerHTML=`${top('Mode Staff',state.user?.name||'Karyawan Staff')}${manualBonusNoticeCard()}${averageAttendanceCard()}${closingNotice()}<div class="hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div>${emptyStockCard}<div class="grid2" style="margin-top:8px"><div class="stat att-status ${mainClass}"><div class="stat-label">${mainLabel}</div><div class="stat-val">${mainValue}</div><div class="stat-foot">${mainFoot}</div></div><div class="stat att-status ${isClosedToday()||(!isDaily()&&!a)?'wait':'ok'}"><div class="stat-label">Status Transaksi</div><div class="stat-val">${isClosedToday()||(!isDaily()&&!a)?'Terkunci':'Terbuka'}</div><div class="stat-foot">${isClosedToday()?'sudah closing':(a?'siap transaksi':'belum absen')}</div></div><div class="stat"><div class="stat-label">Transaksi</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Total Masuk Kerja</div><div class="stat-val">${monthAttendDays()} <span style="font-size:13px;font-weight:850;color:var(--muted);letter-spacing:0">Hari</span></div><div class="stat-foot">${monthID(monthKey())}</div></div></div><div class="card bonus-plus-card" style="margin-top:8px"><div class="bonus-plus-head"><div class="label">Bonus ++</div><button class="refresh-icon-btn" onclick="refresh()" aria-label="Refresh bonus"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg></button></div><div class="big" style="color:var(--blue)">Rp ${rp(totalBonus())}</div><div class="bonus-note">Bonus ini sudah termasuk total bonus keseluruhan</div>${todayClosingBonusInline()}</div>${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`}
+  const mainLabel=c?'Closing Hari Ini':'Absen Hari Ini';const mainValue=c?closingTimeText(c):(a?timeID(ms(a)):'--:--');const mainFoot=c?'sudah closing':(a?'sudah absen':'belum absen');const mainClass=c?'closed':(a?'ok':'wait');page.innerHTML=`${top('Mode Staff',state.user?.name||'Karyawan Staff')}${manualBonusNoticeCard()}${averageAttendanceCard()}${closingNotice()}<div class="hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div>${emptyStockCard}<div class="grid2 staff-stat-grid" style="margin-top:8px"><div class="stat att-status ${mainClass}"><div class="stat-label">${mainLabel}</div><div class="stat-val">${mainValue}</div><div class="stat-foot">${mainFoot}</div></div>${prayerStatCard()}<div class="stat"><div class="stat-label">Transaksi</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Total Masuk Kerja</div><div class="stat-val">${monthAttendDays()} <span style="font-size:13px;font-weight:850;color:var(--muted);letter-spacing:0">Hari</span></div><div class="stat-foot">${monthID(monthKey())}</div></div></div><div class="card bonus-plus-card" style="margin-top:8px"><div class="bonus-plus-head"><div class="label">Bonus ++</div><button class="refresh-icon-btn" onclick="refresh()" aria-label="Refresh bonus"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg></button></div><div class="big" style="color:var(--blue)">Rp ${rp(totalBonus())}</div><div class="bonus-note">Bonus ini sudah termasuk total bonus keseluruhan</div>${todayClosingBonusInline()}</div>${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`}
 function history(){const items=sortDesc(todayTx());const printAllCard=items.length?`<div class="card" style="margin-bottom:8px"><button class="btn primary block" onclick="printTodayTransactions()">🧾 Cetak Semua Transaksi Hari Ini</button><div class="hint" style="margin-top:6px">Cetak ${items.length} transaksi hari ini dalam 1 struk.</div></div>`:'';const body=items.length?`<div class="tx-table"><div class="tx-head"><span>History Transaksi</span><span></span><span></span></div><div class="tx-list">${items.map(txItem).join('')}</div></div>`:'<div class="empty">Belum ada transaksi hari ini.</div>';page.innerHTML=`${top('Riwayat Hari Ini',`${items.length} transaksi · Rp ${rp(todayTotal())}`)}${syncBar()}${printAllCard}${body}`}
 
 function cleanBelanjaText(v){return String(v||'').replace(/[<>]/g,'').replace(/\s+/g,' ').trim()}
