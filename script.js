@@ -1024,7 +1024,7 @@ function belanjaSlug(v){return cleanBelanjaText(v).toLowerCase().replace(/\s+/g,
 function getBelanjakuBridgeQueue(){try{const raw=JSON.parse(localStorage.getItem(BELANJAKU_BRIDGE_KEY)||'[]');return Array.isArray(raw)?raw.filter(Boolean):[]}catch(e){return []}}
 function setBelanjakuBridgeQueue(list){try{localStorage.setItem(BELANJAKU_BRIDGE_KEY,JSON.stringify((list||[]).slice(-250)))}catch(e){}}
 function saveBelanjakuBridgeQueue(item){const list=getBelanjakuBridgeQueue().filter(x=>String(x.id)!==String(item.id));list.push(item);setBelanjakuBridgeQueue(list)}
-function stockEmptyQuickCard(){return `<div class="card stock-empty-card"><div class="stock-empty-left"><div class="stock-empty-icon">🛒</div><div class="stock-empty-copy"><div class="label">Barang Kosong</div><div class="hint">Laporkan Segera Apabila Ada Stok Barang Yang Menipis Atau Kosong</div></div></div><button class="btn stock-empty-btn" type="button" onclick="openEmptyStock()">Laporkan</button></div>`}
+function stockEmptyQuickCard(){return `<div class="card stock-empty-card"><div class="stock-empty-left"><div class="stock-empty-icon">📢</div><div class="stock-empty-copy"><div class="label">Barang Kosong</div><div class="hint">Laporkan Segera Apabila Ada Stok Barang Yang Menipis Atau Kosong</div></div></div><button class="btn stock-empty-btn" type="button" onclick="openEmptyStock()">Laporkan</button></div>`}
 function normalizeEmptyStockVariants(list){
   const merged=[], seen=new Set();
   (Array.isArray(list)?list:[]).forEach(row=>{
