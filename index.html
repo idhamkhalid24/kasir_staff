@@ -2018,6 +2018,14 @@ const RECEIPT_TEXT_DOC_ID='__receipt_text_settings';
 const DEFAULT_RECEIPT_TEXT_SETTINGS={storeName:'ROCKY HIJAB',storeSubtext:'',dailyTitle:'TRANSAKSI HARI INI',dateLabel:'Tanggal',cashierLabel:'Kasir',productLabel:'Produk',totalLabel:'Total',countLabel:'Jumlah',footerText:'Terima kasih',bottomFeedLines:6};
 const LIMITS={txToday:120,attMonth:90,manualToday:80,closingsToday:80,txBonusAll:2000,manualBonusAll:1000,closingsAll:1500};
 const REFRESH_COOLDOWN_MS=30000;
+
+// Bridge ke aplikasi Belanjaku: staff bisa lapor barang kosong (nama barang + warna).
+const BELANJAKU_BRIDGE_KEY='stafku_to_belanjaku_barang_kosong_v1';
+const BELANJAKU_SUPABASE_URL='https://phuzgriglgovzcwgbehr.supabase.co';
+const BELANJAKU_SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBodXpncmlnbGdvdnpjd2diZWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1OTQ3ODUsImV4cCI6MjA5NDE3MDc4NX0.gf-cfo8Vos8uYgZRHG0KUB4xMhXAld2oTYv-wNiKneE';
+// Kunci di atas adalah anon-public Supabase untuk tabel Belanjaku, bukan service role.
+const BELANJAKU_SUPABASE_ITEMS_TABLE='belanja_items';
+
 // HYBRID HEMAT READ: realtime tetap aktif, tapi polling cek device diperlambat.
 const DEVICE_SESSION_CHECK_MS=5*60*1000; // sebelumnya 15 detik, sekarang 5 menit
 const DEVICE_SESSION_ACTION_CACHE_MS=30*1000;
@@ -3003,15 +3011,86 @@ function browserPrintReceiptText(){
   }
   toast('Print/PDF tersedia di APK Android Studio. Untuk browser pakai Salin/Bagikan.');
 }
-function home(){const tx=todayTx(), a=todayAtt(), c=todayClosing();
+function home(){const tx=todayTx(), a=todayAtt(), c=todayClosing(), emptyStockCard=stockEmptyQuickCard();
   if(isDaily()){
     const todayTxBonus=txBonusSum(tx), manualToday=manualBonusToday(), todayBonus=todayTxBonus+manualToday;
     const manualCard='';
-    page.innerHTML=`${top('Mode Harian',state.user?.name||'Karyawan Harian')}${manualBonusNoticeCard()}<div class="hero daily-income-hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div><div class="grid2" style="margin-top:8px"><div class="stat"><div class="stat-label">Transaksi Hari Ini</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Gaji Hari Ini</div><div class="stat-val">Rp ${rp(todayBonus)}</div><div class="stat-foot">hari ini</div></div></div>${manualCard}${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`;
+    page.innerHTML=`${top('Mode Harian',state.user?.name||'Karyawan Harian')}${manualBonusNoticeCard()}<div class="hero daily-income-hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div>${emptyStockCard}<div class="grid2" style="margin-top:8px"><div class="stat"><div class="stat-label">Transaksi Hari Ini</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Gaji Hari Ini</div><div class="stat-val">Rp ${rp(todayBonus)}</div><div class="stat-foot">hari ini</div></div></div>${manualCard}${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`;
     return;
   }
-  const mainLabel=c?'Closing Hari Ini':'Absen Hari Ini';const mainValue=c?closingTimeText(c):(a?timeID(ms(a)):'--:--');const mainFoot=c?'sudah closing':(a?'sudah absen':'belum absen');const mainClass=c?'closed':(a?'ok':'wait');page.innerHTML=`${top('Mode Staff',state.user?.name||'Karyawan Staff')}${manualBonusNoticeCard()}${averageAttendanceCard()}${closingNotice()}<div class="hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div><div class="grid2" style="margin-top:8px"><div class="stat att-status ${mainClass}"><div class="stat-label">${mainLabel}</div><div class="stat-val">${mainValue}</div><div class="stat-foot">${mainFoot}</div></div><div class="stat att-status ${isClosedToday()||(!isDaily()&&!a)?'wait':'ok'}"><div class="stat-label">Status Transaksi</div><div class="stat-val">${isClosedToday()||(!isDaily()&&!a)?'Terkunci':'Terbuka'}</div><div class="stat-foot">${isClosedToday()?'sudah closing':(a?'siap transaksi':'belum absen')}</div></div><div class="stat"><div class="stat-label">Transaksi</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Total Masuk Kerja</div><div class="stat-val">${monthAttendDays()} <span style="font-size:13px;font-weight:850;color:var(--muted);letter-spacing:0">Hari</span></div><div class="stat-foot">${monthID(monthKey())}</div></div></div><div class="card bonus-plus-card" style="margin-top:8px"><div class="bonus-plus-head"><div class="label">Bonus ++</div><button class="refresh-icon-btn" onclick="refresh()" aria-label="Refresh bonus"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg></button></div><div class="big" style="color:var(--blue)">Rp ${rp(totalBonus())}</div><div class="bonus-note">Bonus ini sudah termasuk total bonus keseluruhan</div>${todayClosingBonusInline()}</div>${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`}
+  const mainLabel=c?'Closing Hari Ini':'Absen Hari Ini';const mainValue=c?closingTimeText(c):(a?timeID(ms(a)):'--:--');const mainFoot=c?'sudah closing':(a?'sudah absen':'belum absen');const mainClass=c?'closed':(a?'ok':'wait');page.innerHTML=`${top('Mode Staff',state.user?.name||'Karyawan Staff')}${manualBonusNoticeCard()}${averageAttendanceCard()}${closingNotice()}<div class="hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div>${emptyStockCard}<div class="grid2" style="margin-top:8px"><div class="stat att-status ${mainClass}"><div class="stat-label">${mainLabel}</div><div class="stat-val">${mainValue}</div><div class="stat-foot">${mainFoot}</div></div><div class="stat att-status ${isClosedToday()||(!isDaily()&&!a)?'wait':'ok'}"><div class="stat-label">Status Transaksi</div><div class="stat-val">${isClosedToday()||(!isDaily()&&!a)?'Terkunci':'Terbuka'}</div><div class="stat-foot">${isClosedToday()?'sudah closing':(a?'siap transaksi':'belum absen')}</div></div><div class="stat"><div class="stat-label">Transaksi</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Total Masuk Kerja</div><div class="stat-val">${monthAttendDays()} <span style="font-size:13px;font-weight:850;color:var(--muted);letter-spacing:0">Hari</span></div><div class="stat-foot">${monthID(monthKey())}</div></div></div><div class="card bonus-plus-card" style="margin-top:8px"><div class="bonus-plus-head"><div class="label">Bonus ++</div><button class="refresh-icon-btn" onclick="refresh()" aria-label="Refresh bonus"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg></button></div><div class="big" style="color:var(--blue)">Rp ${rp(totalBonus())}</div><div class="bonus-note">Bonus ini sudah termasuk total bonus keseluruhan</div>${todayClosingBonusInline()}</div>${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`}
 function history(){const items=sortDesc(todayTx());const printAllCard=items.length?`<div class="card" style="margin-bottom:8px"><button class="btn primary block" onclick="printTodayTransactions()">🧾 Cetak Semua Transaksi Hari Ini</button><div class="hint" style="margin-top:6px">Cetak ${items.length} transaksi hari ini dalam 1 struk.</div></div>`:'';const body=items.length?`<div class="tx-table"><div class="tx-head"><span>History Transaksi</span><span></span><span></span></div><div class="tx-list">${items.map(txItem).join('')}</div></div>`:'<div class="empty">Belum ada transaksi hari ini.</div>';page.innerHTML=`${top('Riwayat Hari Ini',`${items.length} transaksi · Rp ${rp(todayTotal())}`)}${syncBar()}${printAllCard}${body}`}
+
+function cleanBelanjaText(v){return String(v||'').replace(/[<>]/g,'').replace(/\s+/g,' ').trim()}
+function belanjaSlug(v){return cleanBelanjaText(v).toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_\-.]/g,'').slice(0,70)||'item'}
+function getBelanjakuBridgeQueue(){try{const raw=JSON.parse(localStorage.getItem(BELANJAKU_BRIDGE_KEY)||'[]');return Array.isArray(raw)?raw.filter(Boolean):[]}catch(e){return []}}
+function setBelanjakuBridgeQueue(list){try{localStorage.setItem(BELANJAKU_BRIDGE_KEY,JSON.stringify((list||[]).slice(-250)))}catch(e){}}
+function saveBelanjakuBridgeQueue(item){const list=getBelanjakuBridgeQueue().filter(x=>String(x.id)!==String(item.id));list.push(item);setBelanjakuBridgeQueue(list)}
+function stockEmptyQuickCard(){return `<div class="card" style="margin-top:8px;border-color:var(--amber-mid);background:linear-gradient(135deg,var(--amber-light),var(--card))"><div class="between" style="align-items:center"><div style="min-width:0"><div class="label">Barang Kosong</div><div class="hint" style="margin-top:3px">Kirim nama barang dan warna ke halaman Staff Belanjaku.</div></div><button class="btn warn" type="button" onclick="openEmptyStock()">Laporkan</button></div></div>`}
+function buildBelanjakuEmptyItem({name,color,qty,supplier,note}){
+  const now=Date.now(), nowISO=new Date(now).toISOString(), u=key(state.user?.username||'staff'), displayName=state.user?.name||state.user?.username||'Staff';
+  const cleanName=cleanBelanjaText(name), cleanColor=cleanBelanjaText(color), cleanSupplier=cleanBelanjaText(supplier), cleanNote=cleanBelanjaText(note);
+  const id='stafku_empty_'+belanjaSlug(u)+'_'+now+'_'+Math.random().toString(36).slice(2,7);
+  return {
+    id,
+    name:cleanName,
+    supplierName:cleanSupplier,
+    kodiPrice:0,
+    variants:[{colorName:cleanColor,qty:Math.max(1,Number(qty)||1),done:false}],
+    unit:'pcs',
+    priority:'Tinggi',
+    note:cleanNote?`Dari Stafku (${displayName}): ${cleanNote}`:`Dari Stafku (${displayName}) - barang kosong`,
+    done:false,
+    source:'stafku_barang_kosong',
+    staffStatus:'inbox',
+    staffRequest:true,
+    createdBy:u,
+    createdByName:displayName,
+    createdAt:nowISO,
+    updatedAt:nowISO,
+    createdAtMs:now,
+    updatedAtMs:now
+  };
+}
+async function sendBelanjakuItemToSupabase(item){
+  if(typeof fetch!=='function')return false;
+  try{
+    const url=`${BELANJAKU_SUPABASE_URL.replace(/\/$/,'')}/rest/v1/${BELANJAKU_SUPABASE_ITEMS_TABLE}?on_conflict=id`;
+    const res=await fetch(url,{method:'POST',headers:{apikey:BELANJAKU_SUPABASE_ANON_KEY,Authorization:`Bearer ${BELANJAKU_SUPABASE_ANON_KEY}`,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({id:item.id,data:item,updated_at:item.updatedAt||new Date().toISOString()})});
+    if(!res.ok)throw new Error('Supabase '+res.status+': '+await res.text());
+    return true;
+  }catch(e){console.warn('Belanjaku bridge belum terkirim',e);return false;}
+}
+async function syncBelanjakuBridgeQueue(){
+  const queue=getBelanjakuBridgeQueue();
+  if(!queue.length)return {sent:0,remaining:0};
+  const remaining=[];let sent=0;
+  for(const item of queue){
+    const ok=await sendBelanjakuItemToSupabase(item);
+    if(ok)sent+=1;else remaining.push(item);
+  }
+  setBelanjakuBridgeQueue(remaining);
+  return {sent,remaining:remaining.length};
+}
+function openEmptyStock(){
+  if(!state.user)return toast('Silakan login ulang');
+  modal('Barang Kosong',`<div class="tx-chip"><span>🛒 Kirim ke Belanjaku</span><b>${timeNow()} WIB</b></div><div class="field"><div class="label">Nama Barang</div><input id="emptyStockName" autocomplete="off" placeholder="Contoh: Pasmina Ceruty"></div><div class="field"><div class="label">Warna / Motif</div><input id="emptyStockColor" autocomplete="off" placeholder="Contoh: Milo"></div><div class="grid2"><div class="field"><div class="label">Qty</div><input id="emptyStockQty" type="tel" inputmode="numeric" pattern="[0-9]*" value="1"></div><div class="field"><div class="label">Supplier (opsional)</div><input id="emptyStockSupplier" autocomplete="off" placeholder=""></div></div><div class="field"><div class="label">Catatan (opsional)</div><input id="emptyStockNote" autocomplete="off" placeholder="Contoh: sering ditanya customer"></div><div class="tx-note-mini">Setelah dikirim, barang masuk halaman <b>Kiriman Staff</b> di Belanjaku. Owner bisa tekan <b>Tambahkan ke Keranjang</b>.</div>`,`<button type="button" class="btn danger" onclick="closeModal(true)">Batal</button><button type="button" class="btn warn" onclick="submitEmptyStock()">Kirim</button>`,'tx-modal');
+  setTimeout(()=>$('emptyStockName')?.focus(),80);
+}
+async function submitEmptyStock(){
+  const name=cleanBelanjaText($('emptyStockName')?.value), color=cleanBelanjaText($('emptyStockColor')?.value);
+  if(!name)return toast('Nama barang wajib diisi');
+  if(!color)return toast('Warna wajib diisi');
+  const qty=Math.max(1,Number(onlyDigits($('emptyStockQty')?.value))||1);
+  const item=buildBelanjakuEmptyItem({name,color,qty,supplier:$('emptyStockSupplier')?.value,note:$('emptyStockNote')?.value});
+  saveBelanjakuBridgeQueue(item);
+  closeModal(true);
+  toast('Barang kosong disiapkan untuk Belanjaku');
+  const result=await syncBelanjakuBridgeQueue();
+  if(result.sent>0)toast('Barang kosong masuk ke halaman Staff Belanjaku');
+  else toast('Tersimpan lokal, buka Belanjaku lalu refresh');
+}
+
 async function pinAsk(msg='Masukkan PIN'){return new Promise(res=>{window.__pin=v=>{closeModal();delete window.__pin;res(String(v||''))};modal('Verifikasi PIN',`<div class="hint" style="margin-bottom:8px">${esc(msg)}</div><input id="pinx" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" placeholder="PIN" style="text-align:center;font-size:22px;font-weight:950">`,`<button class="btn" onclick="__pin('')">Batal</button><button class="btn primary" onclick="__pin(document.getElementById('pinx').value)">Lanjut</button>`);setTimeout(()=>$('pinx')?.focus(),60)})}
 function openTx(){if(!state.user)return;if(!canTx())return toast(isClosedToday()?'Transaksi sudah closing hari ini':'Absen dulu sebelum transaksi');primeSuccessSound();modal('Transaksi Baru',`<div class="tx-chip"><span>⚡ Input cepat</span><b>${timeNow()} WIB</b></div><div class="field"><div class="label">Nama Produk</div><textarea id="txn" class="tx-product-input" placeholder="Produk...&#10;&#10;&#10;" autocomplete="off" rows="4"></textarea></div><div class="field"><div class="label">Nominal Rupiah</div><input id="txa" class="tx-amount-input" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="Rp 0" oninput="formatRupiahInput(this)" style="text-align:right;font-size:25px;font-weight:950"></div><div class="tx-note-mini">Pilih <b>Simpan</b> untuk catat transaksi saja. Pilih <b>Cetak</b> kalau mau simpan sekaligus langsung cetak ke printer.</div>`,`<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;width:100%"><button type="button" class="btn danger" onpointerdown="closeModal(true);event.preventDefault()" ontouchstart="closeModal(true);event.preventDefault()" onclick="closeModal(true)" style="grid-column:1 / -1">Batal</button><button class="btn success" onclick="saveTx(true)" style="background:var(--green);border-color:var(--green);color:#fff">Cetak</button><button class="btn primary" onclick="saveTx(false)">Simpan</button></div>`,'tx-modal')}
 async function saveTx(printAfterSave=false){
@@ -3491,7 +3570,12 @@ function setupAutoSync(){
     }
   });
 }
-window.openStaffNoteLink=openStaffNoteLink;window.login=login;window.logout=logout;window.toggleTheme=toggleTheme;window.openHeaderGuideDetail=openHeaderGuideDetail;window.refresh=refresh;window.hardRefreshApp=hardRefreshApp;window.retrySync=retrySync;window.go=go;window.appBack=appBack;window.openTx=openTx;window.saveTx=saveTx;window.delTx=delTx;window.closeModal=closeModal;window.closeFirstTxParty=closeFirstTxParty;window.closeManualBonusParty=closeManualBonusParty;window.updateLocation=updateLocation;window.clockIn=clockIn;window.formatRupiahInput=formatRupiahInput;window.printReceiptFromTx=printReceiptFromTx;window.printTodayTransactions=printTodayTransactions;window.copyReceiptText=copyReceiptText;window.shareReceiptText=shareReceiptText;window.nativePrintReceiptText=nativePrintReceiptText;window.directPrintReceiptText=directPrintReceiptText;window.browserPrintReceiptText=browserPrintReceiptText;
+
+try{
+  window.addEventListener('online',()=>{syncBelanjakuBridgeQueue().then(r=>{if(r.sent)toast('Data Belanjaku terkirim')}).catch(()=>{})});
+  window.addEventListener('focus',()=>{syncBelanjakuBridgeQueue().catch(()=>{})});
+}catch(e){}
+window.openStaffNoteLink=openStaffNoteLink;window.login=login;window.logout=logout;window.toggleTheme=toggleTheme;window.openHeaderGuideDetail=openHeaderGuideDetail;window.refresh=refresh;window.hardRefreshApp=hardRefreshApp;window.retrySync=retrySync;window.go=go;window.appBack=appBack;window.openTx=openTx;window.openEmptyStock=openEmptyStock;window.submitEmptyStock=submitEmptyStock;window.syncBelanjakuBridgeQueue=syncBelanjakuBridgeQueue;window.saveTx=saveTx;window.delTx=delTx;window.closeModal=closeModal;window.closeFirstTxParty=closeFirstTxParty;window.closeManualBonusParty=closeManualBonusParty;window.updateLocation=updateLocation;window.clockIn=clockIn;window.formatRupiahInput=formatRupiahInput;window.printReceiptFromTx=printReceiptFromTx;window.printTodayTransactions=printTodayTransactions;window.copyReceiptText=copyReceiptText;window.shareReceiptText=shareReceiptText;window.nativePrintReceiptText=nativePrintReceiptText;window.directPrintReceiptText=directPrintReceiptText;window.browserPrintReceiptText=browserPrintReceiptText;
 setupAutoSync();
 // Pull-to-refresh dimatikan supaya tidak ada read tambahan tanpa sengaja.
 // Refresh manual dan realtime tetap aktif.
