@@ -1024,7 +1024,7 @@ function belanjaSlug(v){return cleanBelanjaText(v).toLowerCase().replace(/\s+/g,
 function getBelanjakuBridgeQueue(){try{const raw=JSON.parse(localStorage.getItem(BELANJAKU_BRIDGE_KEY)||'[]');return Array.isArray(raw)?raw.filter(Boolean):[]}catch(e){return []}}
 function setBelanjakuBridgeQueue(list){try{localStorage.setItem(BELANJAKU_BRIDGE_KEY,JSON.stringify((list||[]).slice(-250)))}catch(e){}}
 function saveBelanjakuBridgeQueue(item){const list=getBelanjakuBridgeQueue().filter(x=>String(x.id)!==String(item.id));list.push(item);setBelanjakuBridgeQueue(list)}
-function stockEmptyQuickCard(){return `<div class="card" style="margin-top:8px;border-color:var(--amber-mid);background:linear-gradient(135deg,var(--amber-light),var(--card))"><div class="between" style="align-items:center"><div style="min-width:0"><div class="label">Barang Kosong</div><div class="hint" style="margin-top:3px">Kirim 1 barang dengan banyak warna ke Owner.</div></div><button class="btn warn" type="button" onclick="openEmptyStock()">Laporkan</button></div></div>`}
+function stockEmptyQuickCard(){return `<div class="card" style="margin-top:8px;border-color:var(--amber-mid);background:linear-gradient(135deg,var(--amber-light),var(--card))"><div class="between" style="align-items:center"><div style="min-width:0"><div class="label">Barang Kosong</div><div class="hint" style="margin-top:3px">Laporkan Segera Apabila ada Barang Yang Kosong</div></div><button class="btn warn" type="button" onclick="openEmptyStock()">Laporkan</button></div></div>`}
 function normalizeEmptyStockVariants(list){
   const merged=[], seen=new Set();
   (Array.isArray(list)?list:[]).forEach(row=>{
