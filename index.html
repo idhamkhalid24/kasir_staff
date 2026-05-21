@@ -2571,33 +2571,34 @@ async function getDocs(qy){
   const collectionName=qy.collectionName;
   const constraints=qy.constraints||[];
   const hardLimit=constraints.find(c=>c.kind==='limit')?.count||1000;
-  const filters=constraints.filter(c=>c.kind==='where');
-  const readLimit=Math.min(Math.max(hardLimit*3,1000),5000);
-  let data=null,error=null;
-  try{
-    let req=supabase.from(collectionName).select('id,data');
-    // Penting: filter JSONB langsung di Supabase, bukan ambil data acak lalu difilter lokal.
-    // Tanpa ini, transaksi baru bisa tidak ikut hasil polling lalu riwayat Trx tampak hilang.
-    filters.forEach(c=>{
-      const col='data->>'+String(c.field||'').replace(/[^a-zA-Z0-9_]/g,'');
-      if(!col||col==='data->>')return;
-      if(c.op==='==')req=req.eq(col,String(c.value));
-      else if(c.op==='!=')req=req.neq(col,String(c.value));
-      else if(c.op==='>=')req=req.gte(col,String(c.value));
-      else if(c.op==='<=')req=req.lte(col,String(c.value));
-      else if(c.op==='>')req=req.gt(col,String(c.value));
-      else if(c.op==='<')req=req.lt(col,String(c.value));
-      else if(c.op==='in'&&Array.isArray(c.value))req=req.in(col,c.value.map(String));
-    });
-    ({data,error}=await req.order('id',{ascending:false}).limit(readLimit));
-    if(error)throw error;
-  }catch(e){
-    console.warn('Supabase filtered query fallback',collectionName,e?.message||e);
-    ({data,error}=await supabase.from(collectionName).select('id,data').order('id',{ascending:false}).limit(5000));
-    if(error)throw error;
+  const wheres=constraints.filter(c=>c.kind==='where');
+  let req=supabase.from(collectionName).select('id,data');
+  let canServerFilter=true;
+  for(const c of wheres){
+    // Supabase menyimpan field aplikasi di kolom JSONB `data`.
+    // Filter langsung di server supaya transaksi terbaru tidak hilang dari riwayat
+    // saat tabel sudah ramai. Fallback filter browser tetap dipakai di bawah.
+    const field=String(c.field||'');
+    const safeField=/^[a-zA-Z0-9_]+$/.test(field);
+    if(c.op==='=='&&safeField){
+      req=req.eq(`data->>${field}`,String(c.value));
+    }else{
+      canServerFilter=false;
+    }
   }
+  // Untuk transaksi, ambil buffer lebih besar dan urutkan id DESC karena id transaksi
+  // mengandung timestamp: stafftx_user_171... Ini mencegah polling menimpa riwayat
+  // dengan hasil query parsial ketika data server sudah banyak.
+  const fetchLimit=collectionName==='transactions'
+    ? Math.min(Math.max(hardLimit*50,1000),5000)
+    : Math.min(Math.max(hardLimit*3,hardLimit),5000);
+  if(collectionName==='transactions')req=req.order('id',{ascending:false});
+  const {data,error}=await req.limit(fetchLimit);
+  if(error)throw error;
   let rows=(data||[]).map(normalizeRow);
-  filters.forEach(c=>{rows=rows.filter(row=>compareWhere(row,c))});
+  // Tetap filter ulang di browser untuk keamanan dan operator selain ==.
+  wheres.forEach(c=>{rows=rows.filter(row=>compareWhere(row,c))});
+  rows=sortDesc(rows);
   return querySnapshot(rows.slice(0,hardLimit));
 }
 const getDocsFromServer=getDocs;
@@ -3083,18 +3084,14 @@ function clearStaffRealtime(){
   staffRealtimeStartedFor='';
 }
 function replaceScopedRows(listName,rows,matchFn){
-  const incoming=rows||[];
-  const incomingIds=new Set(incoming.map(x=>String(x?.id||'')).filter(Boolean));
-  const recentCutoff=Date.now()-2*60*1000;
-  const keep=(state.data[listName]||[]).filter(x=>{
-    if(!matchFn(x))return true;
-    if(incomingIds.has(String(x?.id||'')))return false;
-    // Jaga transaksi lokal yang baru dibuat agar tidak hilang saat polling server belum menangkap row baru.
-    if(x?.pending)return true;
-    const n=ms(x);
-    return n&&n>=recentCutoff&&!deleted(x);
-  });
-  state.data[listName]=sortDesc([...keep,...incoming]);
+  const keep=(state.data[listName]||[]).filter(x=>!matchFn(x));
+  state.data[listName]=sortDesc([...keep,...(rows||[])]);
+}
+function mergeScopedRows(listName,rows){
+  const map=new Map();
+  (state.data[listName]||[]).forEach(x=>{if(x&&x.id)map.set(String(x.id),x)});
+  (rows||[]).forEach(x=>{if(x&&x.id)map.set(String(x.id),{...(map.get(String(x.id))||{}),...x})});
+  state.data[listName]=sortDesc([...map.values()]);
 }
 function handleRealtimeError(label,err){
   console.warn(label+' realtime gagal',err?.code||err?.message||err);
@@ -3111,7 +3108,10 @@ function startStaffRealtime(){
   const txQ=query(collection(db,'transactions'),where('user','==',u),where('dateKey','==',d),limit(LIMITS.txToday));
   staffRealtimeUnsubs.push(onSnapshot(txQ,snap=>{
     const rows=sortDesc(snap.docs.map(x=>({id:x.id,...x.data()})));
-    replaceScopedRows('tx',rows,t=>key(t.user)===u&&txDate(t)===d);
+    // Jangan hapus riwayat lokal hanya karena polling Supabase kebetulan membawa hasil parsial.
+    // Server tetap jadi sumber update: row dengan id sama akan dioverwrite, row deleted akan tersaring oleh liveTx().
+    mergeScopedRows('tx',rows);
+    applyPendingToState();
     state.lastSyncMs=Date.now();
     state.syncError='';
     render();
@@ -4179,8 +4179,7 @@ async function saveTx(printAfterSave=false,paymentMethod='',draft=null){
   try{
     await setDoc(doc(db,'transactions',id),{...payload,createdAt:serverTimestamp(),syncedAt:serverTimestamp(),syncedAtMs:Date.now()},{merge:false});
     const savedTx={id,...payload,pending:false};
-    const hadLocal=state.data.tx.some(t=>String(t.id)===String(id));
-    state.data.tx=hadLocal?state.data.tx.map(t=>String(t.id)===String(id)?savedTx:t):[savedTx,...state.data.tx];
+    state.data.tx=state.data.tx.map(t=>t.id===id?savedTx:t);
     removePending(id);
     playSuccessSound();
     await logAudit('transaction_create',{id,user:u,amount,note,paymentMethod:payment,paymentLabel:paymentText});
