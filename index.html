@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#3b6ef0" />
-  <title>Rocky Hijab Staff Ringan - Sesuai Index</title>
+  <title>Rocky Hijab Staff Supabase - Sesuai Server Pusat</title>
   <style>
 
     /* ===== RESET & ROOT ===== */
@@ -2507,11 +2507,106 @@
 </div>
 <script type="module">
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-import { getFirestore, collection, doc, getDoc, getDocs, getDocFromServer, getDocsFromServer, setDoc, addDoc, query, where, limit, serverTimestamp, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+import { createClient as createSupabaseClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-const firebaseConfig={apiKey:'AIzaSyAqmTEKnLKOXcmOoR9RrXksNe5_Fix42w8',authDomain:'rocky-fd14b.firebaseapp.com',projectId:'rocky-fd14b',storageBucket:'rocky-fd14b.firebasestorage.app',messagingSenderId:'861954349314',appId:'1:861954349314:web:bb8384825daedb8d34ca1b'};
-const app=initializeApp(firebaseConfig), db=getFirestore(app);
+// === SUPABASE MIGRATION CONFIG ===
+// Disamakan dengan Server Pusat. Jangan taruh service_role / sb_secret di frontend.
+const SUPABASE_URL='https://ismjupxoiywttkrekmfg.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzbWp1cHhvaXl3dHRrcmVrbWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNzc4MDEsImV4cCI6MjA5NDg1MzgwMX0.WVwqEdkPQ_x9NWR8QXTm85mIAvN8d9V2FaMJ2NiAMC0';
+const supabaseConfig={projectId:'ismjupxoiywttkrekmfg'};
+const supabase=createSupabaseClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const db={type:'supabase',client:supabase};
+const app=db;
+const firebaseConfig=supabaseConfig; // alias lama agar logic lama tetap jalan.
+
+// === FIRESTORE COMPAT LAYER DI ATAS SUPABASE ===
+// Menjaga logic staff tetap sama: collection/doc/query/where/limit/getDoc/getDocs/setDoc/addDoc/onSnapshot/serverTimestamp.
+const SUPABASE_POLL_MS=4500;
+const SERVER_TIMESTAMP_SENTINEL={__supabaseServerTimestamp:true};
+const serverTimestamp=()=>SERVER_TIMESTAMP_SENTINEL;
+const doc=(_db,collectionName,id)=>({kind:'doc',collectionName,id:String(id||'')});
+const collection=(_db,collectionName)=>({kind:'collection',collectionName});
+const where=(field,op,value)=>({kind:'where',field,op,value});
+const limit=(count)=>({kind:'limit',count:Number(count||0)});
+const query=(base,...constraints)=>({kind:'query',collectionName:base.collectionName,constraints});
+function makeId(prefix=''){return `${prefix}${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
+function deepCloneCompat(value){
+  if(value===null||value===undefined)return value;
+  if(value===SERVER_TIMESTAMP_SENTINEL||value?.__supabaseServerTimestamp)return new Date().toISOString();
+  if(value instanceof Date)return value.toISOString();
+  if(Array.isArray(value))return value.map(deepCloneCompat);
+  if(typeof value==='object'){
+    if(typeof value.toDate==='function')return value.toDate().toISOString();
+    const out={};
+    Object.entries(value).forEach(([k,v])=>{if(v!==undefined)out[k]=deepCloneCompat(v)});
+    return out;
+  }
+  return value;
+}
+function normalizeRow(row){const data=row?.data&&typeof row.data==='object'?row.data:{};return {id:row?.id,...data};}
+function docSnapshot(id,data){return {id,exists:()=>!!data,data:()=>data?{...data}:undefined};}
+function querySnapshot(rows){
+  const docs=rows.map(row=>({id:row.id,data:()=>({...row})}));
+  return {docs,size:docs.length,empty:docs.length===0,forEach(cb){docs.forEach(cb)},docChanges(){return docs.map(doc=>({type:'added',doc}))}};
+}
+function getFieldValue(row,field){return String(field||'').split('.').reduce((acc,key)=>acc==null?undefined:acc[key],row);}
+function compareWhere(row,c){
+  const a=getFieldValue(row,c.field), b=c.value;
+  if(c.op==='==')return String(a)===String(b);
+  if(c.op==='!=')return String(a)!==String(b);
+  if(c.op==='>=')return String(a)>=String(b);
+  if(c.op==='<=')return String(a)<=String(b);
+  if(c.op==='>')return String(a)>String(b);
+  if(c.op==='<')return String(a)<String(b);
+  if(c.op==='in')return Array.isArray(b)&&b.map(String).includes(String(a));
+  return true;
+}
+async function getDoc(ref){
+  const {data,error}=await supabase.from(ref.collectionName).select('id,data').eq('id',ref.id).maybeSingle();
+  if(error)throw error;
+  return docSnapshot(ref.id,data?normalizeRow(data):null);
+}
+const getDocFromServer=getDoc;
+async function getDocs(qy){
+  const collectionName=qy.collectionName;
+  const constraints=qy.constraints||[];
+  const hardLimit=constraints.find(c=>c.kind==='limit')?.count||1000;
+  const {data,error}=await supabase.from(collectionName).select('id,data').limit(Math.min(Math.max(hardLimit*3,hardLimit),5000));
+  if(error)throw error;
+  let rows=(data||[]).map(normalizeRow);
+  constraints.filter(c=>c.kind==='where').forEach(c=>{rows=rows.filter(row=>compareWhere(row,c))});
+  return querySnapshot(rows.slice(0,hardLimit));
+}
+const getDocsFromServer=getDocs;
+async function setDoc(ref,payload,options={}){
+  const nextData=deepCloneCompat(payload||{});
+  let finalData=nextData;
+  if(options?.merge){
+    const oldSnap=await getDoc(ref).catch(()=>docSnapshot(ref.id,null));
+    finalData={...(oldSnap.exists()?oldSnap.data():{}),...nextData};
+    delete finalData.id;
+  }
+  const {error}=await supabase.from(ref.collectionName).upsert({id:ref.id,data:finalData},{onConflict:'id'});
+  if(error)throw error;
+  return ref;
+}
+async function addDoc(colRef,payload){const ref=doc(db,colRef.collectionName,makeId());await setDoc(ref,payload||{});return ref;}
+function onSnapshot(refOrQuery,next,errorCb){
+  let stopped=false;
+  const run=async()=>{
+    try{
+      const snap=refOrQuery.kind==='doc'?await getDoc(refOrQuery):await getDocs(refOrQuery);
+      if(!stopped)next(snap);
+    }catch(e){
+      console.warn('Supabase snapshot error:',e?.message||e);
+      if(!stopped&&errorCb)errorCb(e);
+    }
+  };
+  run();
+  const timer=setInterval(run,SUPABASE_POLL_MS);
+  return ()=>{stopped=true;clearInterval(timer)};
+}
+
 const OFFICE_LOC={lat:-6.786168,lng:106.780918};
 const RADIUS_LIMIT=200, MEMBER_URL='https://idhamkhalid24.github.io/kode-khusus-member/';
 const SESSION='rocky_firebase_session_v1', LEGACY_SESSION='rocky_staff_compact_manual_v1', PENDING_KEY='rocky_staff_pending_sync_v2', MANUAL_BONUS_SEEN='rocky_staff_manual_bonus_seen_v1', FIRST_TX_PARTY_SEEN='rocky_staff_first_tx_party_seen_v1', DEVICE_ID_KEY='rocky_staff_device_id_v1', DEVICE_USER_KEY='rocky_staff_device_user_v1', ADMIN=['admin'];
