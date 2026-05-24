@@ -2642,7 +2642,10 @@ const DEFAULT_STAFF_DAILY_NOTE='Semangat bekerja hari ini. Pastikan transaksi di
 const RECEIPT_TEXT_DOC_ID='__receipt_text_settings';
 const DEFAULT_RECEIPT_TEXT_SETTINGS={storeName:'ROCKY HIJAB',storeSubtext:'',dailyTitle:'TRANSAKSI HARI INI',dateLabel:'Tanggal',cashierLabel:'Kasir',productLabel:'Produk',totalLabel:'Total',countLabel:'Jumlah',footerText:'Terima kasih',bottomFeedLines:6};
 const LIMITS={txToday:120,attMonth:90,manualToday:80,closingsToday:80,txBonusAll:2000,manualBonusAll:1000,closingsAll:1500};
-const ROCKY_ADMIN_NOTIFY_WORKER_URL='https://rocky-notif-worker.alfajrihanif24.workers.dev/notify-transaction';
+const ROCKY_ADMIN_NOTIFY_WORKER_BASE_URL='https://rocky-notif-worker.alfajrihanif24.workers.dev';
+const ROCKY_ADMIN_NOTIFY_WORKER_URL=ROCKY_ADMIN_NOTIFY_WORKER_BASE_URL+'/notify-transaction';
+const ROCKY_ADMIN_NOTIFY_ATTENDANCE_URL=ROCKY_ADMIN_NOTIFY_WORKER_BASE_URL+'/notify-attendance';
+const ROCKY_ADMIN_NOTIFY_TRANSACTION_DELETE_URL=ROCKY_ADMIN_NOTIFY_WORKER_BASE_URL+'/notify-transaction-delete';
 const ROCKY_ADMIN_NOTIFY_SECRET='rockyNotifRahasia2026';
 const REFRESH_COOLDOWN_MS=30000;
 
@@ -3284,7 +3287,10 @@ async function flushPending(){
         const payload=item.payload||{};
         const d=String(payload.dateKey||todayKey()).slice(0,10), docId=attendanceDocId(item.user||payload.user,d);
         const existing=await getDocFromServer(doc(db,'attendance',docId));
-        if(!existing.exists())await setDoc(doc(db,'attendance',docId),{...payload,clientId:docId,dateKey:d,createdAt:serverTimestamp(),syncedAt:serverTimestamp(),syncedAtMs:Date.now()},{merge:true});
+        if(!existing.exists()){
+          await setDoc(doc(db,'attendance',docId),{...payload,clientId:docId,dateKey:d,createdAt:serverTimestamp(),syncedAt:serverTimestamp(),syncedAtMs:Date.now()},{merge:true});
+          notifyAdminAttendance({id:docId,...payload,clientId:docId,dateKey:d},'masuk');
+        }
         item.id=docId;
       }
       else remain.push(item);
@@ -4082,6 +4088,63 @@ function notifyAdminNewTransaction(tx={}){
     console.warn('Notif admin gagal:',err?.message||err);
   }
 }
+function notifyRockyAdmin(url,payload={},label='Notif admin'){
+  try{
+    if(!url||!ROCKY_ADMIN_NOTIFY_SECRET)return;
+    fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Notify-Secret':ROCKY_ADMIN_NOTIFY_SECRET},
+      body:JSON.stringify(payload||{})
+    }).then(async r=>{
+      const data=await r.json().catch(()=>null);
+      if(!r.ok||data?.ok===false)console.warn(label+' gagal:',data||r.status);
+      return data;
+    }).catch(err=>console.warn(label+' gagal:',err?.message||err));
+  }catch(err){
+    console.warn(label+' gagal:',err?.message||err);
+  }
+}
+function notifyAdminAttendance(att={},action='masuk'){
+  try{
+    const createdMs=Number(att.createdAtMs||ms(att)||Date.now());
+    const staffName=String(att.name||state.user?.name||att.user||state.user?.username||'Staff');
+    notifyRockyAdmin(ROCKY_ADMIN_NOTIFY_ATTENDANCE_URL,{
+      staff:staffName,
+      user:staffName,
+      username:String(att.user||state.user?.username||''),
+      name:staffName,
+      action:String(action||'masuk'),
+      time:String(att.time||timeID(createdMs)||timeNow()),
+      dateKey:String(att.dateKey||todayKey(new Date(createdMs))),
+      attendanceId:String(att.id||att.clientId||''),
+      note:String(att.note||'Absen dari aplikasi staff')
+    },'Notif absen admin');
+  }catch(err){
+    console.warn('Notif absen admin gagal:',err?.message||err);
+  }
+}
+function notifyAdminTransactionDelete(tx={}){
+  try{
+    const staffName=String(tx.deletedByName||state.user?.name||tx.name||tx.user||state.user?.username||'Staff');
+    const paymentLabel=String(tx.paymentLabel||txPaymentLabel(tx.paymentMethod)||'');
+    notifyRockyAdmin(ROCKY_ADMIN_NOTIFY_TRANSACTION_DELETE_URL,{
+      staff:staffName,
+      user:staffName,
+      username:String(tx.deletedBy||state.user?.username||tx.user||''),
+      name:staffName,
+      amount:Number(tx.amount||0),
+      desc:String(tx.note||tx.desc||'Transaksi'),
+      note:String(tx.note||tx.desc||'Transaksi'),
+      payment:String(paymentLabel||tx.paymentMethod||''),
+      paymentMethod:String(tx.paymentMethod||''),
+      paymentLabel,
+      transactionId:String(tx.id||tx.clientId||''),
+      dateKey:String(tx.dateKey||txDate(tx)||todayKey())
+    },'Notif hapus transaksi admin');
+  }catch(err){
+    console.warn('Notif hapus transaksi admin gagal:',err?.message||err);
+  }
+}
 function openTx(draft={}){
   if(!state.user)return;
   if(!canTx())return toast(isClosedToday()?'Transaksi sudah closing hari ini':'Absen dulu sebelum transaksi');
@@ -4254,6 +4317,7 @@ async function delTx(id){
     await setDoc(doc(db,'transactions',id),{deleted:true,deletedAt:serverTimestamp(),deletedAtMs:Date.now(),deletedBy:state.user.username,deletedByName:state.user.name},{merge:true});
     state.data.tx=state.data.tx.map(x=>String(x.id)===String(id)?{...x,deleted:true,deletedAtMs:Date.now(),deletedBy:state.user.username,deletedByName:state.user.name}:x);
     await logAudit('transaction_soft_delete',{id,user:t.user,amount:Number(t.amount||0),note:t.note||'Transaksi'});
+    notifyAdminTransactionDelete({...t,id,deletedBy:state.user.username,deletedByName:state.user.name});
     toast('Transaksi dihapus aman');
   }catch(e){
     console.error(e);
@@ -4305,6 +4369,7 @@ async function clockIn(){
     await setDoc(doc(db,'attendance',id),{...payload,createdAt:serverTimestamp(),syncedAt:serverTimestamp(),syncedAtMs:Date.now()},{merge:true});
     state.data.att=dedupeAttendanceRows(state.data.att.map(a=>a.id===id?{...a,pending:false}:a));
     removePending(id);
+    notifyAdminAttendance({id,...payload,pending:false},'masuk');
     toast('Absen berhasil');
   }catch(e){
     console.error(e);
