@@ -2634,7 +2634,7 @@ function onSnapshot(refOrQuery,next,errorCb){
 const OFFICE_LOC={lat:-6.786168,lng:106.780918};
 const RADIUS_LIMIT=200, MEMBER_URL='https://idhamkhalid24.github.io/kode-khusus-member/';
 const SESSION='rocky_firebase_session_v1', LEGACY_SESSION='rocky_staff_compact_manual_v1', PENDING_KEY='rocky_staff_pending_sync_v2', MANUAL_BONUS_SEEN='rocky_staff_manual_bonus_seen_v1', FIRST_TX_PARTY_SEEN='rocky_staff_first_tx_party_seen_v1', DEVICE_ID_KEY='rocky_staff_device_id_v1', DEVICE_USER_KEY='rocky_staff_device_user_v1', ADMIN=['admin'];
-const DEFAULT_BONUS={transactionBonusRate:.015,closingBonusPerMinute:100};
+const DEFAULT_BONUS={transactionBonusRate:.015,transactionBonusPercent:1.5,closingBonusPerMinute:100,closingDeadlineTime:'18:00',closingDeadlineHour:18,closingDeadlineMinute:0,closingDeadlineMinutes:1080};
 const HEADER_GUIDE_NOTE_DOC_ID='__header_icon_guide_note';
 const DEFAULT_HEADER_GUIDE_NOTE='Bonus adalah apresiasi tambahan dan dapat berubah sewaktu-waktu. Fokus utama tetap pada penjualan, kinerja, pelayanan, dan tanggung jawab kerja.';
 const STAFF_DAILY_NOTE_DOC_ID='__staff_daily_home_note';
@@ -2833,6 +2833,10 @@ function isDaily(){return isDailyUser(state.user)}
 function hasBonusValue(value){return value!==undefined&&value!==null&&String(value).trim()!==''}
 function globalTransactionBonusRate(){const r=Number(state.data.bonus?.transactionBonusRate);return Number.isFinite(r)&&r>=0?r:DEFAULT_BONUS.transactionBonusRate}
 function globalClosingBonusPerMinute(){const n=Number(state.data.bonus?.closingBonusPerMinute);return Number.isFinite(n)&&n>=0?n:DEFAULT_BONUS.closingBonusPerMinute}
+function normalizeClosingDeadlineParts(value=null,fallback={hour:18,minute:0}){const fb=fallback||{hour:18,minute:0};if(value&&typeof value==='object'){const direct=value.deadlineTime??value.closingDeadlineTime??value.deadline??value.jamClosing??value.jam_closing??value.label??null;if(direct!==null&&direct!==undefined&&String(direct).trim()!=='')return normalizeClosingDeadlineParts(direct,fb);const h=Number(value.deadlineHour??value.closingDeadlineHour??value.hour),m=Number(value.deadlineMinute??value.closingDeadlineMinute??value.minute);if(Number.isInteger(h)&&Number.isInteger(m)&&h>=0&&h<=23&&m>=0&&m<=59)return{hour:h,minute:m};const total=Number(value.deadlineMinutes??value.closingDeadlineMinutes??NaN);if(Number.isFinite(total)&&total>=0)return{hour:Math.floor(total/60)%24,minute:Math.floor(total%60)};return fb;}const raw=String(value??'').trim().replace('.',':').replace(/\s*WIB$/i,'');const match=raw.match(/^(\d{1,2}):(\d{2})/);if(match){const h=Number(match[1]),m=Number(match[2]);if(Number.isInteger(h)&&Number.isInteger(m)&&h>=0&&h<=23&&m>=0&&m<=59)return{hour:h,minute:m};}return fb;}
+function normalizeBonusSettings(data={}){const d=data||{},parts=normalizeClosingDeadlineParts(d,{hour:18,minute:0}),label=`${String(parts.hour).padStart(2,'0')}:${String(parts.minute).padStart(2,'0')}`,rate=Number.isFinite(Number(d.transactionBonusRate))?Number(d.transactionBonusRate):DEFAULT_BONUS.transactionBonusRate,pct=Number.isFinite(Number(d.transactionBonusPercent))?Number(d.transactionBonusPercent):Number((rate*100).toFixed(3)),closing=Number.isFinite(Number(d.closingBonusPerMinute))?Number(d.closingBonusPerMinute):DEFAULT_BONUS.closingBonusPerMinute;return{...DEFAULT_BONUS,...d,transactionBonusRate:rate,transactionBonusPercent:pct,closingBonusPerMinute:closing,closingDeadlineTime:label,closingDeadlineHour:parts.hour,closingDeadlineMinute:parts.minute,closingDeadlineMinutes:(parts.hour*60)+parts.minute};}
+function closingDeadlineTimeLabel(source=null){const parts=normalizeClosingDeadlineParts(source||state.data.bonus||DEFAULT_BONUS,{hour:18,minute:0});return`${String(parts.hour).padStart(2,'0')}:${String(parts.minute).padStart(2,'0')}`}
+function closingDeadlineMinutes(source=null){const parts=normalizeClosingDeadlineParts(source||state.data.bonus||DEFAULT_BONUS,{hour:18,minute:0});return parts.hour*60+parts.minute}
 function userTransactionBonusRate(user=state.user){
   const u=user||{};
   if(hasBonusValue(u.transactionBonusRate)){const r=Number(u.transactionBonusRate);if(Number.isFinite(r)&&r>0)return r}
@@ -3141,7 +3145,7 @@ function startStaffRealtime(){
   },err=>handleRealtimeError('Closing hari ini',err)));
 
   staffRealtimeUnsubs.push(onSnapshot(doc(db,'closings','__bonus_settings'),snap=>{
-    state.data.bonus=snap.exists()?{...DEFAULT_BONUS,...snap.data()}:{...DEFAULT_BONUS};
+    state.data.bonus=snap.exists()?normalizeBonusSettings(snap.data()):normalizeBonusSettings(DEFAULT_BONUS);
     render();
   },err=>handleRealtimeError('Setting bonus',err)));
 
@@ -3216,7 +3220,7 @@ async function loadStaffData(opts={}){
     state.data.headerGuideNote=(guideNoteSnap&&guideNoteSnap.exists())?String((guideNoteSnap.data()||{}).note||DEFAULT_HEADER_GUIDE_NOTE):DEFAULT_HEADER_GUIDE_NOTE;
     state.data.staffDailyNote=(staffDailyNoteSnap&&staffDailyNoteSnap.exists())?{note:DEFAULT_STAFF_DAILY_NOTE,enabled:true,...(staffDailyNoteSnap.data()||{})}:{note:DEFAULT_STAFF_DAILY_NOTE,enabled:true,updatedAtMs:0,updatedByName:''};
     state.data.receiptSettings=(receiptTextSnap&&receiptTextSnap.exists())?normalizeReceiptSettings({...(receiptTextSnap.data()||{})}):normalizeReceiptSettings(DEFAULT_RECEIPT_TEXT_SETTINGS);
-    state.data.bonus=bs.exists()?{...DEFAULT_BONUS,...bs.data()}:{...DEFAULT_BONUS};
+    state.data.bonus=bs.exists()?normalizeBonusSettings(bs.data()):normalizeBonusSettings(DEFAULT_BONUS);
     if(userSnap.exists()){
       const rawUser=userSnap.data()||{}, fresh={id:userSnap.id,username:rawUser.username||userSnap.id,...rawUser};
       if(isAdmin(fresh)||fresh.active===false||deleted(fresh)){clearSessionAndRender('Akun sudah nonaktif / tidak valid');return;}
@@ -3362,8 +3366,8 @@ function closingTimeText(c){
   return n?timeID(n):'--:--';
 }
 function isClosedToday(){const d=todayKey(), u=key(state.user?.username);return state.data.closings.some(c=>c&&c.closed===true&&c.canceled!==true&&!deleted(c)&&String(c.dateKey||'')===d&&((!c.user&&c.scope!=='user')||c.scope==='global'||key(c.user)===u))}
-function delayMin(tm=timeNow()){const m=String(tm).match(/^(\d{1,2}):(\d{2})$/);if(!m)return 0;return Math.max(0,Number(m[1])*60+Number(m[2])-1080)}
-function closingNotice(){if(isDaily()||!todayAtt())return '';const d=delayMin();if(!d||isClosedToday())return '';const rate=userClosingBonusPerMinute();const est=d*rate;return `<div class="card warn" style="margin-bottom:8px"><b>Estimasi bonus closing</b><div class="hint" style="margin-top:4px;color:inherit">Estimasi bonus kamu Rp ${rp(est)}</div></div>`}
+function delayMin(tm=timeNow(),source=null){const m=String(tm).match(/^(\d{1,2}):(\d{2})$/);if(!m)return 0;return Math.max(0,Number(m[1])*60+Number(m[2])-closingDeadlineMinutes(source))}
+function closingNotice(){if(isDaily()||!todayAtt())return '';const d=delayMin();if(!d||isClosedToday())return '';const rate=userClosingBonusPerMinute();const est=d*rate;return `<div class="card warn" style="margin-bottom:8px"><b>Estimasi bonus closing</b><div class="hint" style="margin-top:4px;color:inherit">Estimasi bonus kamu Rp ${rp(est)} · sejak ${closingDeadlineTimeLabel()} WIB</div></div>`}
 function todayClosingBonusNotice(){if(isDaily())return '';const c=todayClosing();if(!c)return '';const val=Math.round(closingBonusValue(c));if(!val)return '';return `<div class="card closing-bonus-card"><div class="between"><div><div class="label">Bonus Closing Hari Ini</div><div class="stat-val" style="font-size:20px;color:var(--green)">Rp ${rp(val)}</div><div class="hint" style="margin-top:3px">Bonus dari closing index hari ini</div></div><span class="pill green">Dapat</span></div></div>`}
 function todayClosingBonusInline(){if(isDaily())return '';const c=todayClosing();if(!c)return '';const val=Math.round(closingBonusValue(c));if(!val)return '';return `<div class="bonus-note" style="margin-top:4px;color:var(--green);font-weight:850">Bonus closing hari ini Rp ${rp(val)}</div>`}
 function canTx(){if(isClosedToday())return false;if(isDaily())return true;return !!todayAtt()}
@@ -3436,7 +3440,7 @@ async function latestBonusSnapshotForSave(){
       deviceId:isDailyUser(fresh)?'':String(fresh.deviceId||state.user?.deviceId||''),
       deviceResetAtMs:Number(fresh.deviceResetAtMs||state.user?.deviceResetAtMs||0)
     };
-    const freshBonus=bonusSnap.exists()?{...DEFAULT_BONUS,...bonusSnap.data()}:{...DEFAULT_BONUS};
+    const freshBonus=bonusSnap.exists()?normalizeBonusSettings(bonusSnap.data()):normalizeBonusSettings(DEFAULT_BONUS);
     state.user=freshUser;
     state.data.bonus=freshBonus;
     localStorage.setItem(SESSION,JSON.stringify(freshUser));
