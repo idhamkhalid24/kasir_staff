@@ -2642,6 +2642,8 @@ const DEFAULT_STAFF_DAILY_NOTE='Semangat bekerja hari ini. Pastikan transaksi di
 const RECEIPT_TEXT_DOC_ID='__receipt_text_settings';
 const DEFAULT_RECEIPT_TEXT_SETTINGS={storeName:'ROCKY HIJAB',storeSubtext:'',dailyTitle:'TRANSAKSI HARI INI',dateLabel:'Tanggal',cashierLabel:'Kasir',productLabel:'Produk',totalLabel:'Total',countLabel:'Jumlah',footerText:'Terima kasih',bottomFeedLines:6};
 const LIMITS={txToday:120,attMonth:90,manualToday:80,closingsToday:80,txBonusAll:2000,manualBonusAll:1000,closingsAll:1500};
+const ROCKY_ADMIN_NOTIFY_WORKER_URL='https://rocky-notif-worker.alfajrihanif24.workers.dev/notify-transaction';
+const ROCKY_ADMIN_NOTIFY_SECRET='rockyNotifRahasia2026';
 const REFRESH_COOLDOWN_MS=30000;
 
 // Bridge ke aplikasi Belanjaku: staff bisa lapor barang kosong (nama barang + warna).
@@ -4050,6 +4052,36 @@ function txPaymentLabel(v){
   const s=String(v||'').trim();
   return s||'';
 }
+
+function notifyAdminNewTransaction(tx={}){
+  try{
+    if(!ROCKY_ADMIN_NOTIFY_WORKER_URL||!ROCKY_ADMIN_NOTIFY_SECRET)return;
+    const amount=Number(tx.amount||0);
+    const staffName=String(tx.name||tx.user||state.user?.name||state.user?.username||'Staff');
+    const note=String(tx.note||'Transaksi baru');
+    fetch(ROCKY_ADMIN_NOTIFY_WORKER_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Notify-Secret':ROCKY_ADMIN_NOTIFY_SECRET},
+      body:JSON.stringify({
+        user:staffName,
+        username:String(tx.user||state.user?.username||''),
+        name:staffName,
+        amount,
+        note,
+        paymentMethod:String(tx.paymentMethod||''),
+        paymentLabel:String(tx.paymentLabel||txPaymentLabel(tx.paymentMethod)||''),
+        transactionId:String(tx.id||tx.clientId||''),
+        dateKey:String(tx.dateKey||todayKey())
+      })
+    }).then(async r=>{
+      const data=await r.json().catch(()=>null);
+      if(!r.ok||data?.ok===false)console.warn('Notif admin gagal:',data||r.status);
+      return data;
+    }).catch(err=>console.warn('Notif admin gagal:',err?.message||err));
+  }catch(err){
+    console.warn('Notif admin gagal:',err?.message||err);
+  }
+}
 function openTx(draft={}){
   if(!state.user)return;
   if(!canTx())return toast(isClosedToday()?'Transaksi sudah closing hari ini':'Absen dulu sebelum transaksi');
@@ -4187,6 +4219,7 @@ async function saveTx(printAfterSave=false,paymentMethod='',draft=null){
     removePending(id);
     playSuccessSound();
     await logAudit('transaction_create',{id,user:u,amount,note,paymentMethod:payment,paymentLabel:paymentText});
+    notifyAdminNewTransaction(savedTx);
     render();
     if(firstTxToday)showFirstTxParty(amount,note);
     if(printAfterSave){
