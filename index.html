@@ -2898,7 +2898,8 @@ function manualBonusDate(b){
   const raw=String(b?.dateKey||b?.bonusDate||b?.date||'').slice(0,10);
   if(/^\d{4}-\d{2}-\d{2}$/.test(raw))return raw;
   const n=ms(b);
-  return n?todayKey(new Date(n)):todayKey();
+  // Jangan fallback ke hari ini, karena bonus lama tanpa dateKey bisa ikut muncul lagi saat hari/bulan berganti.
+  return n?todayKey(new Date(n)):'';
 }
 function manualBonusFallbackId(b){return `${key(b?.user)}_${manualBonusDate(b)}_${Number(b?.amount||0)}_${ms(b)||''}`}
 function manualBonusId(b){return String(b?.id||b?.docId||b?.clientId||manualBonusFallbackId(b))}
@@ -3197,7 +3198,7 @@ async function loadStaffData(opts={}){
   if(!silent)showLoad(true);
   try{
     // Load awal tetap ringan untuk absen, tapi transaksi & bonus manual user diambil lintas tanggal
-    // supaya kartu Bonus++ menghitung total keseluruhan, bukan reset saat tanggal berganti.
+    // lalu kartu Bonus++ difilter hanya untuk bulan berjalan agar otomatis reset saat ganti bulan.
     const [tx,att,manual,bs,userSnap,guideNoteSnap,staffDailyNoteSnap,receiptTextSnap]=await Promise.all([
       getDocs(query(collection(db,'transactions'),where('user','==',u),limit(LIMITS.txBonusAll))),
       getDocs(query(collection(db,'attendance'),where('user','==',u),limit(LIMITS.attMonth))),
@@ -3321,9 +3322,13 @@ function manualBonusRowsForDate(dateKey=todayKey()){
   const d=String(dateKey||todayKey()).slice(0,10);
   return sortDesc((state.data.manual||[]).filter(b=>!deleted(b)&&manualBonusDate(b)===d&&Number(b.amount||0)!==0));
 }
+function manualBonusRowsForMonth(month=monthKey()){
+  const m=String(month||monthKey()).slice(0,7);
+  return sortDesc((state.data.manual||[]).filter(b=>!deleted(b)&&manualBonusDate(b).startsWith(m)&&Number(b.amount||0)!==0));
+}
 function manualBonusRowsAll(){return sortDesc((state.data.manual||[]).filter(b=>!deleted(b)&&Number(b.amount||0)!==0))}
 function manualBonusToday(){return manualBonusRowsForDate(todayKey()).reduce((sum,b)=>sum+Number(b.amount||0),0)}
-function manualBonus(){return manualBonusRowsAll().reduce((sum,b)=>sum+Number(b.amount||0),0)}
+function manualBonus(){return manualBonusRowsForMonth(monthKey()).reduce((sum,b)=>sum+Number(b.amount||0),0)}
 function activeClosings(){return state.data.closings.filter(c=>c&&c.closed===true&&c.canceled!==true&&!deleted(c))}
 function closingScope(c){return String(c?.scope||(c?.user?'user':'global')).toLowerCase()}
 function closingBonusValue(c){
@@ -3337,12 +3342,13 @@ function closingBonusValue(c){
   // Jangan fallback ke bonusPerUser/totalBonus, karena user yang sudah closing per-user bisa terbaca dobel.
   return Number(map[u]||0);
 }
-function closingBonusRows(){
+function closingBonusRows(month=monthKey()){
   if(isDaily())return [];
+  const m=String(month||monthKey()).slice(0,7);
   const byDate=new Map();
   activeClosings().forEach(c=>{
     const d=String(c.dateKey||'').slice(0,10);
-    if(!d)return;
+    if(!d||!d.startsWith(m))return;
     const val=Math.round(closingBonusValue(c));
     if(!val)return;
     const scope=closingScope(c), prev=byDate.get(d);
@@ -3351,9 +3357,9 @@ function closingBonusRows(){
   });
   return [...byDate.values()];
 }
-function closingBonus(){return closingBonusRows().reduce((sum,x)=>sum+Number(x.val||0),0)}
-function closingCount(){return closingBonusRows().length}
-function trxBonus(){return txBonusSum(liveTx())}
+function closingBonus(){return closingBonusRows(monthKey()).reduce((sum,x)=>sum+Number(x.val||0),0)}
+function closingCount(){return closingBonusRows(monthKey()).length}
+function trxBonus(){return txBonusSum(monthTx())}
 function totalBonus(){return trxBonus()+closingBonus()+manualBonus()}
 function todayClosing(){
   const d=todayKey(), u=key(state.user?.username);
@@ -3923,7 +3929,7 @@ function home(){const tx=todayTx(), a=todayAtt(), c=todayClosing(), emptyStockCa
     page.innerHTML=`${top('Mode Harian',state.user?.name||'Karyawan Harian')}${manualBonusNoticeCard()}<div class="hero daily-income-hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div>${emptyStockCard}<div class="grid2" style="margin-top:8px"><div class="stat"><div class="stat-label">Transaksi Hari Ini</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Gaji Hari Ini</div><div class="stat-val">Rp ${rp(todayBonus)}</div><div class="stat-foot">hari ini</div></div></div>${prayerStatCard('daily')}${manualCard}${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`;
     return;
   }
-  const mainLabel=c?'Closing Hari Ini':'Absen Hari Ini';const mainValue=c?closingTimeText(c):(a?timeID(ms(a)):'--:--');const mainFoot=c?'sudah closing':(a?'sudah absen':'belum absen');const mainClass=c?'closed':(a?'ok':'wait');page.innerHTML=`${top('Mode Staff',state.user?.name||'Karyawan Staff')}${manualBonusNoticeCard()}${averageAttendanceCard()}${closingNotice()}<div class="hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div>${emptyStockCard}<div class="grid2 staff-stat-grid" style="margin-top:8px"><div class="stat att-status ${mainClass}"><div class="stat-label">${mainLabel}</div><div class="stat-val">${mainValue}</div><div class="stat-foot">${mainFoot}</div></div>${prayerStatCard()}<div class="stat"><div class="stat-label">Transaksi</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Total Masuk Kerja</div><div class="stat-val">${monthAttendDays()} <span style="font-size:13px;font-weight:850;color:var(--muted);letter-spacing:0">Hari</span></div><div class="stat-foot">${monthID(monthKey())}</div></div></div><div class="card bonus-plus-card" style="margin-top:8px"><div class="bonus-plus-head"><div class="label">Bonus ++</div><button class="refresh-icon-btn" onclick="refresh()" aria-label="Refresh bonus"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg></button></div><div class="big" style="color:var(--blue)">Rp ${rp(totalBonus())}</div><div class="bonus-note">Bonus ini sudah termasuk total bonus keseluruhan</div>${todayClosingBonusInline()}</div>${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`}
+  const mainLabel=c?'Closing Hari Ini':'Absen Hari Ini';const mainValue=c?closingTimeText(c):(a?timeID(ms(a)):'--:--');const mainFoot=c?'sudah closing':(a?'sudah absen':'belum absen');const mainClass=c?'closed':(a?'ok':'wait');page.innerHTML=`${top('Mode Staff',state.user?.name||'Karyawan Staff')}${manualBonusNoticeCard()}${averageAttendanceCard()}${closingNotice()}<div class="hero"><div class="kicker">Pendapatan Hari Ini</div><div class="big">Rp ${rp(todayTotal())}</div><div class="sub hero-meta-line">${dateID(todayKey()).slice(0,5)} · ${tx.length} trx</div>${syncHeroLine()}</div>${emptyStockCard}<div class="grid2 staff-stat-grid" style="margin-top:8px"><div class="stat att-status ${mainClass}"><div class="stat-label">${mainLabel}</div><div class="stat-val">${mainValue}</div><div class="stat-foot">${mainFoot}</div></div>${prayerStatCard()}<div class="stat"><div class="stat-label">Transaksi</div><div class="stat-val">${tx.length}</div><div class="stat-foot">hari ini</div></div><div class="stat"><div class="stat-label">Total Masuk Kerja</div><div class="stat-val">${monthAttendDays()} <span style="font-size:13px;font-weight:850;color:var(--muted);letter-spacing:0">Hari</span></div><div class="stat-foot">${monthID(monthKey())}</div></div></div><div class="card bonus-plus-card" style="margin-top:8px"><div class="bonus-plus-head"><div class="label">Bonus Bulan Ini</div><button class="refresh-icon-btn" onclick="refresh()" aria-label="Refresh bonus"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg></button></div><div class="big" style="color:var(--blue)">Rp ${rp(totalBonus())}</div><div class="bonus-note">Bonus bulan ${monthID(monthKey())}: transaksi + closing + bonus manual</div>${todayClosingBonusInline()}</div>${staffDailyNoteCard()}<div class="bonus-refresh-note"><span class="note-alert-icon">!</span><span><b>Perhatian:</b> klik ikon refresh saat aplikasi error atau saat Transaksi gagal di lakukan.<br><span style="display:block;margin-top:2px">Copyright © 2026 Program by Alfajri – Rocky Hijab.</span></span></div>${headerIconGuide()}`}
 function history(){const items=sortDesc(todayTx());const printAllCard=items.length?`<div class="card" style="margin-bottom:8px"><button class="btn primary block" onclick="printTodayTransactions()">🧾 Cetak Semua Transaksi Hari Ini</button><div class="hint" style="margin-top:6px">Cetak ${items.length} transaksi hari ini dalam 1 struk.</div></div>`:'';const body=items.length?`<div class="tx-table"><div class="tx-head"><span>History Transaksi</span><span></span><span></span></div><div class="tx-list">${items.map(txItem).join('')}</div></div>`:'<div class="empty">Belum ada transaksi hari ini.</div>';page.innerHTML=`${top('Riwayat Hari Ini',`${items.length} transaksi · Rp ${rp(todayTotal())}`)}${syncBar()}${printAllCard}${body}`}
 
 function cleanBelanjaText(v){return String(v||'').replace(/[<>]/g,'').replace(/\s+/g,' ').trim()}
